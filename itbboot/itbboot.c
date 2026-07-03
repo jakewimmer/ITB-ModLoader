@@ -216,9 +216,65 @@ __asm__(
 	"movq g_getfield_addr(%rip), %rax\n\t"
 	"jmp *%rax\n\t");
 
+/* Check if the current process is the Breach game binary.
+ * Returns 1 if this is Breach, 0 otherwise. */
+static int itbboot_is_breach(void) {
+	char exepath[256];
+	ssize_t n = readlink("/proc/self/exe", exepath, sizeof(exepath) - 1);
+	if (n < 0 || n >= (ssize_t)(sizeof(exepath) - 1)) {
+		itbboot_log("readlink /proc/self/exe failed or path too long");
+		return 0;
+	}
+	exepath[n] = '\0';
+
+	/* Extract the basename and check if it's "Breach". */
+	const char *basename = exepath;
+	for (const char *p = exepath; *p; p++) {
+		if (*p == '/') {
+			basename = p + 1;
+		}
+	}
+	int is_breach = (strcmp(basename, "Breach") == 0);
+	if (!is_breach) {
+		itbboot_log("process is not Breach (exe: %s); skipping hook", exepath);
+	}
+	return is_breach;
+}
+
+/* Verify that the bytes at addr match the expected lua_getfield prologue.
+ * Expected prologue: 55 48 89 e5 48 83 ec 40 48 89 7d d8
+ * Returns 1 if they match, 0 otherwise. */
+static int itbboot_verify_prologue(uintptr_t addr) {
+	static const unsigned char expected[] = {
+		0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x40,
+		0x48, 0x89, 0x7D, 0xD8
+	};
+	unsigned char *dst = (unsigned char *)addr;
+	for (int i = 0; i < 12; i++) {
+		if (dst[i] != expected[i]) {
+			itbboot_log("prologue mismatch at %p[%d]: expected 0x%02x, found 0x%02x",
+				(void *)addr, i, expected[i], dst[i]);
+			return 0;
+		}
+	}
+	return 1;
+}
+
 /* Patch lua_getfield's first 12 bytes with `movabs rax, stub; jmp rax`. */
 static void itbboot_install_hook(void) {
 	uintptr_t addr = LUA_GETFIELD;
+
+	/* Guard 1: Only patch in the Breach process. */
+	if (!itbboot_is_breach()) {
+		return;
+	}
+
+	/* Guard 2: Verify the prologue before patching (self-checking). */
+	if (!itbboot_verify_prologue(addr)) {
+		itbboot_log("prologue verification failed at %p; skipping hook", (void *)addr);
+		return;
+	}
+
 	long ps = sysconf(_SC_PAGESIZE);
 	if (ps <= 0) {
 		ps = 4096;
