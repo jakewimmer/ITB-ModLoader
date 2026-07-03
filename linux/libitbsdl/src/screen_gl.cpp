@@ -3,6 +3,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cmath>
+#include <climits>
 #include <string>
 /* Define before glew.h to avoid system GL/glu.h which doesn't exist on this host */
 #define GLEW_STATIC
@@ -194,8 +195,14 @@ void Surface::createSurfaceFromPixelData(int w, int h) {
 
 void Surface::setBitmap(const uint8_t *data, int sx, int sy, int w, int h,
                         int stride) {
-  if (!data)
+  if (!data || w <= 0 || h <= 0)
     return;
+
+  /* Check for integer overflow: ensure w * h * 4 won't overflow */
+  if (w > static_cast<int>(SIZE_MAX / 4) ||
+      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+    return;
+  }
 
   pixelData = new unsigned char[w * h * 4];
   int initial = 0;
@@ -260,7 +267,7 @@ Surface::Surface(const Blob *blob) {
 }
 
 bool Surface::isValid() const {
-  return this && pixelData;
+  return pixelData != nullptr;
 }
 
 uint32_t Surface::texture() {
@@ -283,7 +290,7 @@ bool Surface::wasDrawn() {
 
 /* Outlined surface: adds colored outline around existing surface */
 void Surface::addOutline(int levels, const Color *color) {
-  if (levels == 0)
+  if (levels == 0 || width <= 0 || height <= 0)
     return;
 
   uint32_t colorValue =
@@ -291,6 +298,12 @@ void Surface::addOutline(int levels, const Color *color) {
 
   int w = width;
   int h = height;
+
+  /* Check for integer overflow before allocation */
+  if (w > static_cast<int>(SIZE_MAX / 4) ||
+      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+    return;
+  }
 
   unsigned char *data = new unsigned char[w * h * 4];
   unsigned char *data2 = new unsigned char[w * h * 4];
@@ -347,6 +360,12 @@ Surface::Surface(Surface *parent, int levels, Color *color) {
 
   int w = parent->w();
   int h = parent->h();
+
+  /* Check for integer overflow before allocation */
+  if (w > static_cast<int>(SIZE_MAX / 4) ||
+      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+    return;
+  }
 
   pixelData = new unsigned char[w * h * 4];
   std::memcpy(pixelData, parent->pixelData, 4 * w * h);
@@ -409,6 +428,12 @@ Surface::Surface(Surface *parent, std::vector<Color *> colormap) {
   int w = parent->w();
   int h = parent->h();
 
+  /* Check for integer overflow before allocation */
+  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / sizeof(uint32_t)) ||
+      h > static_cast<int>(SIZE_MAX / (sizeof(uint32_t) * w))) {
+    return;
+  }
+
   uint32_t *data = new uint32_t[w * h];
   uint32_t *pixels = (uint32_t *)parent->pixelData;
 
@@ -440,6 +465,12 @@ Surface::Surface(Surface *parent, Color *color) {
   int w = parent->w();
   int h = parent->h();
 
+  /* Check for integer overflow before allocation */
+  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / sizeof(uint32_t)) ||
+      h > static_cast<int>(SIZE_MAX / (sizeof(uint32_t) * w))) {
+    return;
+  }
+
   uint32_t *data = new uint32_t[w * h];
   uint32_t *pixels = (uint32_t *)parent->pixelData;
 
@@ -462,13 +493,19 @@ Surface::Surface(Surface *parent, Color *color) {
 }
 
 /* Grayscale: convert surface to grayscale */
-Surface::Surface(Surface *parent, int type) {
+Surface::Surface(Surface *parent, [[maybe_unused]] int type) {
   init();
   if (!parent || !parent->isValid())
     return;
 
   int w = parent->w();
   int h = parent->h();
+
+  /* Check for integer overflow before allocation */
+  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / sizeof(uint32_t)) ||
+      h > static_cast<int>(SIZE_MAX / (sizeof(uint32_t) * w))) {
+    return;
+  }
 
   uint32_t *data = new uint32_t[w * h];
   uint32_t *pixels = (uint32_t *)parent->pixelData;
@@ -499,6 +536,12 @@ SurfaceScreenshot::SurfaceScreenshot() {
 
   int w, h;
   SDL_GL_GetDrawableSize(window, &w, &h);
+
+  /* Check for integer overflow before allocation */
+  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / 4) ||
+      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+    return;
+  }
 
   unsigned char *pixels = new unsigned char[4 * w * h];
   glReadPixels(0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
@@ -554,10 +597,6 @@ void Screen::finishWithoutSwapping() {
   glPopMatrix();
 
   glMatrixMode(GL_MODELVIEW);
-
-  /* Update wasDrawn tracking: swap lastFrameMap with new data from texturesMap
-   */
-  lastFrameMap.clear();
 }
 
 void Screen::finish() {
@@ -588,6 +627,10 @@ void Screen::blitRect(Surface *src, Rect *srcRect, Rect *destRect,
   coord.y = y1;
   lastFrameMap[src->hash] = coord;
 
+  /* Note: srcRect is accepted but currently ignored; always renders full
+   * texture. This matches the Windows proxy behavior (sdl-utils.cpp:719).
+   * Sub-rect blitting would require computing texCoord bounds from srcRect.
+   */
   glBegin(GL_QUADS);
   glTexCoord2f(0, 0);
   glVertex3i(x1, y1, 0);

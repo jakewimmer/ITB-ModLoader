@@ -18,13 +18,23 @@ extern "C" void SDL_GL_SwapWindow(SDL_Window *window) {
   if (g_lua && !g_draw_hooks.empty()) {
     Screen screen;
     screen.begin();
-    for (auto it = g_draw_hooks.rbegin(); it != g_draw_hooks.rend(); ++it) {
+    /* Snapshot the hook list to guard against iterator invalidation if a
+     * hook's Lua function triggers garbage collection or hook registration.
+     */
+    std::vector<void *> hooks_snapshot = g_draw_hooks;
+    for (auto it = hooks_snapshot.rbegin(); it != hooks_snapshot.rend(); ++it) {
       DrawHook *hook = static_cast<DrawHook *>(*it);
       hook->draw(screen);
     }
     screen.finishWithoutSwapping();
   }
 
+  /* Clear lastFrameMap once per frame after finishWithoutSwapping, matching
+   * the proxy pattern (sdl-hooks.cpp:31): this ensures wasDrawn() gates
+   * onModsLoaded correctly, and prevents mid-frame screen:finish() calls
+   * from wiping state.
+   */
+  SDL::lastFrameMap.clear();
   real(window);
 }
 
@@ -52,8 +62,12 @@ extern "C" int SDL_PollEvent(SDL_Event *evt) {
     Event e;
     e.event = *evt;
 
+    /* Snapshot the hook list to guard against iterator invalidation if a
+     * hook's Lua function triggers garbage collection or hook registration.
+     */
+    std::vector<void *> hooks_snapshot = g_event_hooks;
     bool handled = false;
-    for (auto *hook_ptr : g_event_hooks) {
+    for (auto *hook_ptr : hooks_snapshot) {
       EventHook *hook = static_cast<EventHook *>(hook_ptr);
       if (hook->handle(e)) {
         handled = true;
