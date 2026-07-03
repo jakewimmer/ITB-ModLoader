@@ -9,6 +9,8 @@
 #include <SDL2/SDL.h>
 #include <LuaBridge/LuaBridge.h>
 #include "itbsdl.h"
+#include "text_freetype.h"
+#include "blob.h"
 
 using namespace luabridge;
 
@@ -170,6 +172,38 @@ static void install_sdl_namespace(lua_State *L) {
 
       .deriveClass<SDL::SurfaceScreenshot, SDL::Surface>("screenshot")
       .addConstructor<void(*)(void)>()
+      .endClass()
+
+      /* TextSettings: text rendering parameters */
+      .beginClass<SDL::TextSettings>("textsettings")
+      .addConstructor<void(*)(void)>()
+      .addData("antialias", &SDL::TextSettings::antialias)
+      .addData("color", &SDL::TextSettings::color)
+      .addData("outlineWidth", &SDL::TextSettings::outlineWidth)
+      .addData("outlineColor", &SDL::TextSettings::outlineColor)
+      .endClass()
+
+      /* Font: system font resolved via Fontconfig */
+      .beginClass<SDL::Font>("font")
+      .addConstructor<void(*)(const std::string &, double)>()
+      .addFunction("ascent", &SDL::Font::getAscent)
+      .addFunction("descent", &SDL::Font::getDescent)
+      .endClass()
+
+      /* FileFont: FreeType font from file path */
+      .deriveClass<SDL::FileFont, SDL::Font>("filefont")
+      .addConstructor<void(*)(const std::string &, double)>()
+      .endClass()
+
+      /* FileFont: FreeType font from memory blob */
+      .deriveClass<SDL::FileFont, SDL::Font>("filefontFromBlob")
+      .addConstructor<void(*)(const SDL::Blob *, double)>()
+      .endClass()
+
+      /* Text: render UTF-8 string to RGBA surface */
+      .deriveClass<SDL::Surface, SDL::Surface>("text")
+      .addConstructor<void(*)(const SDL::Font *, const SDL::TextSettings *,
+                              const std::string &)>()
       .endClass()
 
       /* Screen class */

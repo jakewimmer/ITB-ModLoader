@@ -1,4 +1,6 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <dlfcn.h>
 #include <SDL2/SDL.h>
 #include "itbsdl.h"
