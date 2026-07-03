@@ -5,17 +5,18 @@ local function lazy_load()
 		return
 	end
 
+	local library = Platform.nativeLibrary("ftldat")
 	try(function()
-		LOG("Loading ftldat.dll...")
-		package.loadlib("ftldat.dll", "luaopen_ftldat")()
+		LOG(string.format("Loading %s...", library))
+		package.loadlib(library, "luaopen_ftldat")()
 		ftldat_rs = ftldat
 		ftldat = nil
-		LOG("Successfully loaded ftldat.dll!")
+		LOG(string.format("Successfully loaded %s!", library))
 	end)
 	:catch(function(err)
 		error(string.format(
-				"Failed to load ftldat.dll: %s",
-				tostring(err)
+				"Failed to load %s: %s",
+				library, tostring(err)
 		))
 	end)
 end
