@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lua.h>
+#include <lua.hpp>
 #include <vector>
 #include <SDL2/SDL.h>
 #include "screen_gl.h"

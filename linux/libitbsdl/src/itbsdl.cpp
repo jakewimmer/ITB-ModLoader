@@ -1,9 +1,7 @@
 // Shared module state. Because the same .so is loaded via LD_PRELOAD and
 // package.loadlib, these globals are shared between the SDL interposers and the
 // Lua-registered callbacks.
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
+#include <lua.hpp>
 #include <vector>
 #include <algorithm>
 #include <SDL2/SDL.h>

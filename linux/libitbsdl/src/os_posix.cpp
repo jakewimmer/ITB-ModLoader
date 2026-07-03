@@ -1,9 +1,7 @@
 #include "blob.h"
 #include "itbsdl.h"
 
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
+#include <lua.hpp>
 #include <LuaBridge/LuaBridge.h>
 
 #include <SDL2/SDL.h>
