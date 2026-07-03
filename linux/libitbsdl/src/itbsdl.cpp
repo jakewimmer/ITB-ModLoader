@@ -274,7 +274,10 @@ extern "C" void register_os_namespace(lua_State *L);
 
 extern "C" int luaopen_itbsdl(lua_State *L) {
   g_lua = L;
-  luaL_openlibs(L);
+  // Do NOT call luaL_openlibs(L): the game already opened the standard libraries on
+  // this state. Re-opening them re-runs luaopen_package, which restores the stock
+  // package.loadlib and clobbers the dlopen-based replacement libitbboot injected —
+  // breaking every later package.loadlib (e.g. itb_io). We only add our namespaces.
   install_sdl_namespace(L);
   register_os_namespace(L);
   return 0;
