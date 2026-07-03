@@ -60,8 +60,7 @@ private:
   uint8_t *owned_data;
 
 public:
-  BlobFromResourceDat(const std::shared_ptr<ResourceDat> &dat,
-                      const std::string &entryname);
+  BlobFromResourceDat(const ResourceDat *dat, const std::string &entryname);
   ~BlobFromResourceDat();
 };
 

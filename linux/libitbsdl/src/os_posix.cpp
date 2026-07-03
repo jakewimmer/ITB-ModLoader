@@ -342,7 +342,7 @@ void ResourceDat::reload() {
   fclose(file);
 }
 
-BlobFromResourceDat::BlobFromResourceDat(const std::shared_ptr<ResourceDat> &dat,
+BlobFromResourceDat::BlobFromResourceDat(const ResourceDat *dat,
                                          const std::string &entryname)
     : owned_data(nullptr) {
   if (!dat) {
@@ -393,21 +393,6 @@ BlobFromResourceDat::~BlobFromResourceDat() {
 
 } // namespace SDL
 
-/* Lua C++ wrappers for resourceDat and blob functions */
-static std::shared_ptr<ResourceDat> lua_sdl_resourceDat(
-    const std::string &filename) {
-  return std::make_shared<ResourceDat>(filename);
-}
-
-static std::shared_ptr<Blob> lua_sdl_blobFromFile(const std::string &filename) {
-  return std::make_shared<BlobFromFile>(filename);
-}
-
-static std::shared_ptr<Blob> lua_sdl_blobFromResourceDat(
-    const std::shared_ptr<ResourceDat> &dat, const std::string &entryname) {
-  return std::make_shared<BlobFromResourceDat>(dat, entryname);
-}
-
 static void install_os_namespace(lua_State *L) {
   getGlobalNamespace(L)
       .beginNamespace("os")
@@ -452,8 +437,7 @@ static void install_os_namespace(lua_State *L) {
 
       /* BlobFromResourceDat: load entry from resource.dat archive */
       .deriveClass<BlobFromResourceDat, Blob>("blobFromResourceDat")
-      .addConstructor<void(*)(const std::shared_ptr<ResourceDat> &,
-                              const std::string &)>()
+      .addConstructor<void(*)(const ResourceDat *, const std::string &)>()
       .endClass()
 
       .endNamespace();
