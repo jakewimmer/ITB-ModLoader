@@ -93,6 +93,28 @@ struct EventHookImpl : public EventHook {
   }
 };
 
+/* Colormapped surface: recolors a parent surface using a Lua array of
+ * sdl.color values. Mirrors the Windows proxy's SurfaceColorMapped wrapper,
+ * converting the Lua table into the std::vector<Color*> the base ctor wants. */
+static std::vector<SDL::Color *> createColormapFromLua(LuaRef r) {
+  std::vector<SDL::Color *> res;
+  for (int i = 1; i <= r.length(); i++) {
+    res.push_back(r[i].cast<SDL::Color *>());
+  }
+  return res;
+}
+
+struct SurfaceColorMapped : public SDL::Surface {
+  SurfaceColorMapped(SDL::Surface *parent, LuaRef r)
+      : SDL::Surface(parent, createColormapFromLua(r)) {}
+};
+
+/* Grayscale surface: single-argument wrapper matching the loader's
+ * sdl.grayscale(surface) call; forwards to the base grayscale ctor. */
+struct SurfaceGrayscale : public SDL::Surface {
+  explicit SurfaceGrayscale(SDL::Surface *parent) : SDL::Surface(parent, 0) {}
+};
+
 static void install_sdl_namespace(lua_State *L) {
   getGlobalNamespace(L)
       .beginNamespace("sdl")
@@ -149,7 +171,7 @@ static void install_sdl_namespace(lua_State *L) {
       .endClass()
 
       .deriveClass<SDL::Surface, SDL::Surface>("surfaceFromBlob")
-      .addConstructor<void(*)(const uint8_t *, size_t)>()
+      .addConstructor<void(*)(const SDL::Blob *)>()
       .endClass()
 
       .deriveClass<SDL::Surface, SDL::Surface>("outlined")
@@ -164,8 +186,12 @@ static void install_sdl_namespace(lua_State *L) {
       .addConstructor<void(*)(SDL::Surface *, SDL::Color *)>()
       .endClass()
 
-      .deriveClass<SDL::Surface, SDL::Surface>("grayscale")
-      .addConstructor<void(*)(SDL::Surface *, int)>()
+      .deriveClass<SurfaceColorMapped, SDL::Surface>("colormapped")
+      .addConstructor<void(*)(SDL::Surface *, LuaRef)>()
+      .endClass()
+
+      .deriveClass<SurfaceGrayscale, SDL::Surface>("grayscale")
+      .addConstructor<void(*)(SDL::Surface *)>()
       .endClass()
 
       .deriveClass<SDL::SurfaceScreenshot, SDL::Surface>("screenshot")

@@ -1,4 +1,5 @@
 #include "screen_gl.h"
+#include "blob.h"
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -239,13 +240,17 @@ Surface::Surface(const std::string &filename) {
 }
 
 /* Load surface from blob (in-memory image data) */
-Surface::Surface(const uint8_t *blob, size_t len) {
+Surface::Surface(const Blob *blob) {
   init();
+
+  if (!blob || !blob->data || blob->length == 0) {
+    return;
+  }
 
   int w, h, channels;
   unsigned char *data =
-      stbi_load_from_memory(blob, static_cast<int>(len), &w, &h, &channels,
-                            STBI_rgb_alpha);
+      stbi_load_from_memory(blob->data, static_cast<int>(blob->length), &w, &h,
+                            &channels, STBI_rgb_alpha);
   if (!data) {
     return;
   }

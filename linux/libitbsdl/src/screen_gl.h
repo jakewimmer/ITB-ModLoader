@@ -15,6 +15,7 @@ struct Surface;
 struct Screen;
 class Font;
 struct TextSettings;
+class Blob;
 
 /* Texture management: track which textures were drawn this frame for wasDrawn() */
 struct Coord {
@@ -87,7 +88,7 @@ struct Surface {
 
   /* Image loading constructors */
   explicit Surface(const std::string &filename);        // from file
-  explicit Surface(const uint8_t *blob, size_t len);   // from blob
+  explicit Surface(const Blob *blob);                   // from blob
 
   /* Text rendering (Task 4: FreeType) */
   Surface(const Font *font, const TextSettings *settings,
