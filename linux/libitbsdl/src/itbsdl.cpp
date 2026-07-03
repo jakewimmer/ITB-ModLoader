@@ -16,36 +16,7 @@ lua_State *g_lua = nullptr;
 std::vector<void *> g_draw_hooks;
 std::vector<void *> g_event_hooks;
 
-/* Minimal Screen stub for Task 2. Task 3 provides the real implementation
- * with OpenGL rendering. */
-Screen::Screen() {
-  window = SDL_GL_GetCurrentWindow();
-}
-
-int Screen::w() {
-  int w, h;
-  SDL_GL_GetDrawableSize(window, &w, &h);
-  return w;
-}
-
-int Screen::h() {
-  int w, h;
-  SDL_GL_GetDrawableSize(window, &w, &h);
-  return h;
-}
-
-void Screen::begin() {
-  // Task 3: set up GL projection, clipping, etc.
-}
-
-void Screen::finishWithoutSwapping() {
-  // Task 3: tear down GL state.
-}
-
-void Screen::finish() {
-  finishWithoutSwapping();
-  // Task 3: swap buffers if called directly (normally SDL_GL_SwapWindow does this).
-}
+/* Screen implementation is in screen_gl.cpp (Task 3) */
 
 /* Event stub methods (Task 2). Task 3+ may expand these. */
 int Event::type() { return event.type; }
@@ -126,6 +97,101 @@ static void install_sdl_namespace(lua_State *L) {
   getGlobalNamespace(L)
       .beginNamespace("sdl")
 
+      /* Color class with static members and data fields */
+      .beginClass<SDL::Color>("color")
+      .addStaticData("white", &SDL::Color::White, false)
+      .addStaticData("black", &SDL::Color::Black, false)
+      .addStaticData("transparent", &SDL::Color::Transparent, false)
+      .addData("r", &SDL::Color::r)
+      .addData("g", &SDL::Color::g)
+      .addData("b", &SDL::Color::b)
+      .addData("a", &SDL::Color::a)
+      .endClass()
+
+      .deriveClass<SDL::Color, SDL::Color>("rgba")
+      .addConstructor<void(*)(int, int, int, int)>()
+      .endClass()
+
+      .deriveClass<SDL::Color, SDL::Color>("rgb")
+      .addConstructor<void(*)(int, int, int)>()
+      .endClass()
+
+      /* Rect class */
+      .beginClass<SDL::Rect>("rect")
+      .addConstructor<void(*)(int, int, int, int)>()
+      .addData("x", &SDL::Rect::x)
+      .addData("y", &SDL::Rect::y)
+      .addData("w", &SDL::Rect::w)
+      .addData("h", &SDL::Rect::h)
+      .addFunction("contains", &SDL::Rect::contains)
+      .addFunction("intersects", &SDL::Rect::intersects)
+      .addFunction("getIntersect", &SDL::Rect::getIntersect)
+      .addFunction("getUnion", &SDL::Rect::getUnion)
+      .endClass()
+
+      /* Timer class */
+      .beginClass<SDL::Timer>("timer")
+      .addConstructor<void(*)(void)>()
+      .addFunction("elapsed", &SDL::Timer::elapsed)
+      .addFunction("reset", &SDL::Timer::reset)
+      .endClass()
+
+      /* Surface class and derived transforms */
+      .beginClass<SDL::Surface>("surface")
+      .addConstructor<void(*)(const std::string &)>()
+      .addFunction("w", &SDL::Surface::w)
+      .addFunction("h", &SDL::Surface::h)
+      .addFunction("padl", &SDL::Surface::leftPadding)
+      .addFunction("padr", &SDL::Surface::rightPadding)
+      .addData("x", &SDL::Surface::x, false)
+      .addData("y", &SDL::Surface::y, false)
+      .addFunction("wasDrawn", &SDL::Surface::wasDrawn)
+      .endClass()
+
+      .deriveClass<SDL::Surface, SDL::Surface>("surfaceFromBlob")
+      .addConstructor<void(*)(const uint8_t *, size_t)>()
+      .endClass()
+
+      .deriveClass<SDL::Surface, SDL::Surface>("outlined")
+      .addConstructor<void(*)(SDL::Surface *, int, SDL::Color *)>()
+      .endClass()
+
+      .deriveClass<SDL::Surface, SDL::Surface>("scaled")
+      .addConstructor<void(*)(int, SDL::Surface *)>()
+      .endClass()
+
+      .deriveClass<SDL::Surface, SDL::Surface>("multiply")
+      .addConstructor<void(*)(SDL::Surface *, SDL::Color *)>()
+      .endClass()
+
+      .deriveClass<SDL::Surface, SDL::Surface>("grayscale")
+      .addConstructor<void(*)(SDL::Surface *, int)>()
+      .endClass()
+
+      .deriveClass<SDL::SurfaceScreenshot, SDL::Surface>("screenshot")
+      .addConstructor<void(*)(void)>()
+      .endClass()
+
+      /* Screen class */
+      .beginClass<SDL::Screen>("screen")
+      .addConstructor<void(*)(void)>()
+      .addFunction("w", &SDL::Screen::w)
+      .addFunction("h", &SDL::Screen::h)
+      .addFunction("begin", &SDL::Screen::begin)
+      .addFunction("finish", &SDL::Screen::finish)
+      .addFunction("finishWithoutSwapping", &SDL::Screen::finishWithoutSwapping)
+      .addFunction("blit", &SDL::Screen::blit)
+      .addFunction("blitRect", &SDL::Screen::blitRect)
+      .addFunction("drawrect", &SDL::Screen::drawrect)
+      .addFunction("clip", &SDL::Screen::clip)
+      .addFunction("unclip", &SDL::Screen::unclip)
+      .addFunction("mask", &SDL::Screen::mask)
+      .addFunction("unmask", &SDL::Screen::unmask)
+      .addFunction("clearmask", &SDL::Screen::clearmask)
+      .addFunction("getClipRect", &SDL::Screen::getClipRect)
+      .endClass()
+
+      /* Hook classes */
       .beginClass<DrawHookImpl>("drawHook")
       .addConstructor<void(*)(LuaRef)>()
       .endClass()
@@ -134,6 +200,7 @@ static void install_sdl_namespace(lua_State *L) {
       .addConstructor<void(*)(LuaRef)>()
       .endClass()
 
+      /* Event class */
       .beginClass<Event>("event")
       .addConstructor<void(*)(void)>()
       .addFunction("type", &Event::type)
@@ -144,6 +211,7 @@ static void install_sdl_namespace(lua_State *L) {
       .addFunction("mousebutton", &Event::mousebutton)
       .endClass()
 
+      /* Event type constants */
       .beginNamespace("events")
       .addVariable("quit", &event::quit, false)
       .addVariable("keydown", &event::keydown, false)
@@ -153,6 +221,18 @@ static void install_sdl_namespace(lua_State *L) {
       .addVariable("mousebuttonup", &event::mousebuttonup, false)
       .addVariable("mousewheel", &event::mousewheel, false)
       .addVariable("textinput", &event::textinput, false)
+      .endNamespace()
+
+      /* Mouse position */
+      .beginNamespace("mouse")
+      .addFunction("x", SDL::mousex)
+      .addFunction("y", SDL::mousey)
+      .endNamespace()
+
+      /* Clipboard */
+      .beginNamespace("clipboard")
+      .addFunction("set", SDL::setClipboardData)
+      .addFunction("get", SDL::getClipboardData)
       .endNamespace()
 
       .endNamespace();

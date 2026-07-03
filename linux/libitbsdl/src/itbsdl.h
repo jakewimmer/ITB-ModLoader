@@ -3,31 +3,18 @@
 #include <lua.h>
 #include <vector>
 #include <SDL2/SDL.h>
+#include "screen_gl.h"
 
 /* Module globals shared across LD_PRELOAD interposers and loadlib registration. */
 extern lua_State *g_lua;
 extern std::vector<void *> g_draw_hooks;
 extern std::vector<void *> g_event_hooks;
 
-/* Forward declarations for minimal Task 2 stubs.
- * Real implementations in Task 3 (Screen), Task 2 (DrawHook/EventHook). */
-
-struct Screen {
-  SDL_Window *window;
-
-  Screen();
-  ~Screen() = default;
-
-  int w();
-  int h();
-  void begin();
-  void finishWithoutSwapping();
-  void finish();
-};
+/* Forward declarations for Event and hook classes. */
 
 struct DrawHook {
   virtual ~DrawHook() = default;
-  virtual void draw(Screen &screen) = 0;
+  virtual void draw(SDL::Screen &screen) = 0;
 };
 
 struct Event {
@@ -45,3 +32,15 @@ struct EventHook {
   virtual ~EventHook() = default;
   virtual bool handle(Event &evt) = 0;
 };
+
+/* Expose SDL namespace classes as top-level for LuaBridge binding */
+using SDL::Screen;
+using SDL::Surface;
+using SDL::Color;
+using SDL::Rect;
+using SDL::Timer;
+using SDL::SurfaceScreenshot;
+using SDL::mousex;
+using SDL::mousey;
+using SDL::setClipboardData;
+using SDL::getClipboardData;
