@@ -31,10 +31,9 @@ add_library(itbsdl SHARED
     third_party/glew/glew.c
 )
 
-# GLEW compilation requires -DGLEW_NO_GLU to avoid requiring GL/glu.h
-# and -D__ANDROID__ to skip glxew.h which requires X11 headers
+# GLEW compilation requires -D__ANDROID__ to skip glxew.h which requires X11 headers
 set_source_files_properties(third_party/glew/glew.c PROPERTIES
-    COMPILE_FLAGS "-DGLEW_STATIC -DGLEW_NO_GLU -D__ANDROID__")
+    COMPILE_FLAGS "-D__ANDROID__")
 
 target_include_directories(itbsdl PRIVATE
     src ${CMAKE_CURRENT_SOURCE_DIR}/third_party
@@ -42,8 +41,13 @@ target_include_directories(itbsdl PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glew
     ${SDL2_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS} ${Fontconfig_INCLUDE_DIRS})
 
-# Apply GLEW defines to all source files
+# Apply GLEW defines to all source files (unified in target_compile_definitions)
 target_compile_definitions(itbsdl PRIVATE GLEW_STATIC GLEW_NO_GLU)
+
+# Enable strict warnings for src/ (not third_party/)
+target_compile_options(itbsdl PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>
+    $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
 
 # SDL2 is only needed for headers; we don't link it (game provides its own at runtime).
 # Task 1 calls no SDL functions. Task 2+ will interpose SDL functions via dlsym.

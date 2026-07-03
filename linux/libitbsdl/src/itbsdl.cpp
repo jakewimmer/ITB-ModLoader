@@ -4,6 +4,7 @@
 #include <lua.hpp>
 #include <vector>
 #include <algorithm>
+#include <cstdio>
 #include <SDL2/SDL.h>
 #include <LuaBridge/LuaBridge.h>
 #include "itbsdl.h"
@@ -64,7 +65,7 @@ struct DrawHookImpl : public DrawHook {
     try {
       fn(screen);
     } catch (const luabridge::LuaException &e) {
-      // TODO: log error
+      fprintf(stderr, "Draw hook exception: %s\n", e.what());
     }
   }
 };
@@ -87,7 +88,7 @@ struct EventHookImpl : public EventHook {
     try {
       return fn(evt);
     } catch (const luabridge::LuaException &e) {
-      // TODO: log error
+      fprintf(stderr, "Event hook exception: %s\n", e.what());
       return false;
     }
   }
