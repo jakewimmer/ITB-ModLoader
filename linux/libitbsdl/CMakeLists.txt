@@ -13,7 +13,12 @@ find_package(Fontconfig REQUIRED)
 # Link directly to the GLVND library.
 set(OPENGL_LIBRARIES /lib64/libOpenGL.so.0)
 
-add_subdirectory(third_party/lua-5.1.5)
+# Lua 5.1 is NOT vendored/linked. The game already runs one Lua 5.1 runtime; a
+# second embedded copy sharing the game's lua_State corrupted the heap. We use
+# only the vendored HEADERS (lua.hpp / lua.h on the include path below) to compile
+# against the C API and leave every lua_* UNDEFINED, resolved at load time from
+# libitbboot.so, which re-exports the game's Lua symbols. (No add_subdirectory of
+# third_party/lua-5.1.5, no lua51_static link.)
 
 # Sources grow as later tasks land: Task 2 adds interpose.cpp, Task 3 screen_gl.cpp,
 # Task 4 text_freetype.cpp, Task 5 os_posix.cpp.
@@ -44,8 +49,9 @@ target_compile_definitions(itbsdl PRIVATE GLEW_STATIC GLEW_NO_GLU)
 # Task 1 calls no SDL functions. Task 2+ will interpose SDL functions via dlsym.
 # OpenGL is linked because it's a system library; Task 3 uses GLVND.
 # FreeType and Fontconfig are linked because they're required by text_freetype.cpp.
+# Lua is intentionally absent: lua_* stays undefined, resolved from libitbboot.so.
 target_link_libraries(itbsdl PRIVATE
-    lua51_static ${FREETYPE_LIBRARIES} ${Fontconfig_LIBRARIES} ${OPENGL_LIBRARIES} dl)
+    ${FREETYPE_LIBRARIES} ${Fontconfig_LIBRARIES} ${OPENGL_LIBRARIES} dl)
 
 # Output as libitbsdl.so; staged to repo root by the packaging step.
 set_target_properties(itbsdl PROPERTIES OUTPUT_NAME itbsdl PREFIX "lib")
