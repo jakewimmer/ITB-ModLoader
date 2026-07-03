@@ -25,6 +25,7 @@ set(OPENGL_LIBRARIES /lib64/libOpenGL.so.0)
 add_library(itbsdl SHARED
     src/itbsdl.cpp
     src/interpose.cpp
+    src/gl_interpose.cpp
     src/screen_gl.cpp
     src/text_freetype.cpp
     src/os_posix.cpp

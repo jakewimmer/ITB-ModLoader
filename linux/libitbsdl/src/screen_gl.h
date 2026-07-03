@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <cstdint>
+#include <cstddef>
 
 namespace SDL {
 
@@ -26,6 +27,11 @@ struct Coord {
 
 extern std::map<uint32_t, uint64_t> texturesMap;      // GLuint -> hash
 extern std::map<uint64_t, Coord> lastFrameMap;        // hash -> x,y from last frame
+
+/* 64-bit FNV-1a hash over raw RGBA pixel bytes. Shared by Surface (to hash its
+ * own pixel data) and the GL draw interposers (to hash the game's texture
+ * uploads) so a Surface and an identically-pixelled game texture hash equal. */
+uint64_t simple_hash(const void *data, size_t len);
 
 /**
  * Color: RGBA color with static convenience values

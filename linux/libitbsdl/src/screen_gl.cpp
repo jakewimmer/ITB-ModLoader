@@ -5,9 +5,8 @@
 #include <cmath>
 #include <climits>
 #include <string>
-/* Define before glew.h to avoid system GL/glu.h which doesn't exist on this host */
-#define GLEW_STATIC
-#define GLEW_NO_GLU
+/* GLEW_STATIC / GLEW_NO_GLU (needed so glew.h skips the missing system GL/glu.h)
+ * are supplied for the whole target via target_compile_definitions. */
 #include "glew.h"
 
 /* stb_image implementation */
@@ -16,8 +15,15 @@
 #define STBI_ONLY_JPEG
 #include "../third_party/stb_image.h"
 
-/* xxHash for texture hashing (simple 64-bit hash) */
-static uint64_t simple_hash(const void *data, size_t len) {
+namespace SDL {
+
+/* Module globals */
+std::map<uint32_t, uint64_t> texturesMap;
+std::map<uint64_t, Coord> lastFrameMap;
+
+/* 64-bit FNV-1a hash over raw pixel bytes. Declared in screen_gl.h so the GL
+ * draw interposers hash game texture uploads through the identical code path. */
+uint64_t simple_hash(const void *data, size_t len) {
   const uint8_t *p = (const uint8_t *)data;
   uint64_t h = 0xcbf29ce484222325ULL;
   for (size_t i = 0; i < len; i++) {
@@ -26,12 +32,6 @@ static uint64_t simple_hash(const void *data, size_t len) {
   }
   return h;
 }
-
-namespace SDL {
-
-/* Module globals */
-std::map<uint32_t, uint64_t> texturesMap;
-std::map<uint64_t, Coord> lastFrameMap;
 
 /* GLEW initialization guard */
 static bool g_glew_initialized = false;
@@ -272,8 +272,12 @@ bool Surface::isValid() const {
 
 uint32_t Surface::texture() {
   if (textureId == 0 && isValid()) {
+    /* glTexture() binds the new texture and calls glTexImage2D, which routes
+     * through the interposed glTexImage2D (gl_interpose.cpp) and records
+     * texturesMap[textureId] = simple_hash(pixelData) -- the same value as
+     * this->hash. The game's own textures are hashed by the identical path, so
+     * a Surface and an identically-pixelled game texture share one hash. */
     textureId = glTexture(pixelData, width, height);
-    texturesMap[textureId] = hash;
   }
   return textureId;
 }
@@ -604,8 +608,8 @@ void Screen::finish() {
   SDL_GL_SwapWindow(window);
 }
 
-void Screen::blitRect(Surface *src, Rect *srcRect, Rect *destRect,
-                      Color *color) {
+void Screen::blitRect(Surface *src, [[maybe_unused]] Rect *srcRect,
+                      Rect *destRect, Color *color) {
   if (!src || !src->isValid())
     return;
 
