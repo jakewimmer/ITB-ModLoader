@@ -4,17 +4,18 @@ local function lazy_load()
 		return
 	end
 
+	local library = Platform.nativeLibrary("itb_io")
 	try(function()
-		LOG("Loading itb_io.dll...")
-		package.loadlib("itb_io.dll", "luaopen_itb_io")()
+		LOG(string.format("Loading %s...", library))
+		package.loadlib(library, "luaopen_itb_io")()
 		factory = itb_io
 		itb_io = nil
-		LOG("Successfully loaded itb_io.dll!")
+		LOG(string.format("Successfully loaded %s!", library))
 	end)
 	:catch(function(err)
 		error(string.format(
-				"Failed to load itb_io.dll: %s",
-				tostring(err)
+				"Failed to load %s: %s",
+				library, tostring(err)
 		))
 	end)
 end
