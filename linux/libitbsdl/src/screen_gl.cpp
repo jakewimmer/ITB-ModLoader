@@ -1,4 +1,5 @@
 #include "screen_gl.h"
+#include "alloc_guard.h"
 #include "blob.h"
 #include <cstring>
 #include <algorithm>
@@ -199,8 +200,7 @@ void Surface::setBitmap(const uint8_t *data, int sx, int sy, int w, int h,
     return;
 
   /* Check for integer overflow: ensure w * h * 4 won't overflow */
-  if (w > static_cast<int>(SIZE_MAX / 4) ||
-      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+  if (!alloc_fits(w, h, 4)) {
     return;
   }
 
@@ -304,8 +304,7 @@ void Surface::addOutline(int levels, const Color *color) {
   int h = height;
 
   /* Check for integer overflow before allocation */
-  if (w > static_cast<int>(SIZE_MAX / 4) ||
-      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+  if (!alloc_fits(w, h, 4)) {
     return;
   }
 
@@ -366,8 +365,7 @@ Surface::Surface(Surface *parent, int levels, Color *color) {
   int h = parent->h();
 
   /* Check for integer overflow before allocation */
-  if (w > static_cast<int>(SIZE_MAX / 4) ||
-      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+  if (!alloc_fits(w, h, 4)) {
     return;
   }
 
@@ -433,8 +431,7 @@ Surface::Surface(Surface *parent, std::vector<Color *> colormap) {
   int h = parent->h();
 
   /* Check for integer overflow before allocation */
-  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / sizeof(uint32_t)) ||
-      h > static_cast<int>(SIZE_MAX / (sizeof(uint32_t) * w))) {
+  if (!alloc_fits(w, h, sizeof(uint32_t))) {
     return;
   }
 
@@ -470,8 +467,7 @@ Surface::Surface(Surface *parent, Color *color) {
   int h = parent->h();
 
   /* Check for integer overflow before allocation */
-  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / sizeof(uint32_t)) ||
-      h > static_cast<int>(SIZE_MAX / (sizeof(uint32_t) * w))) {
+  if (!alloc_fits(w, h, sizeof(uint32_t))) {
     return;
   }
 
@@ -506,8 +502,7 @@ Surface::Surface(Surface *parent, [[maybe_unused]] int type) {
   int h = parent->h();
 
   /* Check for integer overflow before allocation */
-  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / sizeof(uint32_t)) ||
-      h > static_cast<int>(SIZE_MAX / (sizeof(uint32_t) * w))) {
+  if (!alloc_fits(w, h, sizeof(uint32_t))) {
     return;
   }
 
@@ -542,8 +537,7 @@ SurfaceScreenshot::SurfaceScreenshot() {
   SDL_GL_GetDrawableSize(window, &w, &h);
 
   /* Check for integer overflow before allocation */
-  if (w <= 0 || h <= 0 || w > static_cast<int>(SIZE_MAX / 4) ||
-      h > static_cast<int>(SIZE_MAX / (4 * w))) {
+  if (!alloc_fits(w, h, 4)) {
     return;
   }
 

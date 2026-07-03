@@ -42,14 +42,18 @@ namespace {
  * glTexImage2D hash step and the draw-marker step below. */
 GLuint g_bound_texture = 0;
 
+/* The hash value corresponding to the currently bound texture, cached to avoid
+ * redundant map lookups on every draw call. Reset when a new texture is bound. */
+uint64_t g_current_bound_hash = 0;
+
 /* Record that the currently bound texture was drawn this frame. Coord is left
  * at its default (0,0): wasDrawn() only tests presence in lastFrameMap for the
  * onModsLoaded gate, so deriving exact draw positions (which the proxy computes
- * from vertex submission and the modelview stack) is unnecessary here. */
+ * from vertex submission and the modelview stack) is unnecessary here. Only
+ * records once per texture-binding change per frame (dedup via cached hash). */
 void mark_bound_texture_drawn() {
-  auto iter = SDL::texturesMap.find(g_bound_texture);
-  if (iter != SDL::texturesMap.end()) {
-    SDL::lastFrameMap[iter->second] = SDL::Coord();
+  if (g_current_bound_hash != 0) {
+    SDL::lastFrameMap[g_current_bound_hash] = SDL::Coord();
   }
 }
 
@@ -61,6 +65,11 @@ extern "C" void glBindTexture(GLenum target, GLuint texture) {
 
   if (target == GL_TEXTURE_2D) {
     g_bound_texture = texture;
+    /* Cache the hash for this texture to avoid redundant lookups in draw calls.
+     * On texture-binding change, recompute; within a binding, mark_bound_texture_drawn
+     * uses the cached value. */
+    auto iter = SDL::texturesMap.find(texture);
+    g_current_bound_hash = (iter != SDL::texturesMap.end()) ? iter->second : 0;
   }
   real(target, texture);
 }

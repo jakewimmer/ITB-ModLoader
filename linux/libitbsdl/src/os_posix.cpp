@@ -274,7 +274,17 @@ BlobFromFile::BlobFromFile(const std::string &filename) : owned_data(nullptr) {
   size_t size = static_cast<size_t>(file_pos);
   fseek(file, 0, SEEK_SET);
 
-  owned_data = new uint8_t[size];
+  owned_data = nullptr;
+  try {
+    owned_data = new uint8_t[size];
+  } catch (const std::bad_alloc &) {
+    fprintf(stderr, "BlobFromFile: allocation failed for %zu bytes\n", size);
+    fclose(file);
+    data = nullptr;
+    length = 0;
+    return;
+  }
+
   length = size;
   size_t read_bytes = fread(owned_data, 1, size, file);
   fclose(file);

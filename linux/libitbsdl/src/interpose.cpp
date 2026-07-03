@@ -20,6 +20,13 @@ extern "C" void SDL_GL_SwapWindow(SDL_Window *window) {
     screen.begin();
     /* Snapshot the hook list to guard against iterator invalidation if a
      * hook's Lua function triggers garbage collection or hook registration.
+     * WARNING: Snapshot holds void* pointers that may become dangling if a
+     * hook's Lua function destroys another hook mid-iteration. Iteration is
+     * safe (pointers are copied before modification), but dereferencing an
+     * invalidated pointer would be unsafe. Currently mitigated by the fact that
+     * hook destruction in Lua happens through refcount, and hooks are not
+     * directly exposed to the caller during execution, but this remains a
+     * potential hazard if hook lifetime management changes.
      */
     std::vector<void *> hooks_snapshot = g_draw_hooks;
     for (auto it = hooks_snapshot.rbegin(); it != hooks_snapshot.rend(); ++it) {
@@ -64,6 +71,13 @@ extern "C" int SDL_PollEvent(SDL_Event *evt) {
 
     /* Snapshot the hook list to guard against iterator invalidation if a
      * hook's Lua function triggers garbage collection or hook registration.
+     * WARNING: Snapshot holds void* pointers that may become dangling if a
+     * hook's Lua function destroys another hook mid-iteration. Iteration is
+     * safe (pointers are copied before modification), but dereferencing an
+     * invalidated pointer would be unsafe. Currently mitigated by the fact that
+     * hook destruction in Lua happens through refcount, and hooks are not
+     * directly exposed to the caller during execution, but this remains a
+     * potential hazard if hook lifetime management changes.
      */
     std::vector<void *> hooks_snapshot = g_event_hooks;
     bool handled = false;

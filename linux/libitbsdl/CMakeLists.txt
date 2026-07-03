@@ -37,7 +37,11 @@ set_source_files_properties(third_party/glew/glew.c PROPERTIES
     COMPILE_FLAGS "-D__ANDROID__")
 
 target_include_directories(itbsdl PRIVATE
-    src ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+    src)
+
+# Third-party headers are included with -isystem to suppress warnings from our src/
+target_include_directories(itbsdl SYSTEM PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.1.5
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glew
     ${SDL2_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS} ${Fontconfig_INCLUDE_DIRS})
@@ -60,3 +64,9 @@ target_link_libraries(itbsdl PRIVATE
 
 # Output as libitbsdl.so; staged to repo root by the packaging step.
 set_target_properties(itbsdl PROPERTIES OUTPUT_NAME itbsdl PREFIX "lib")
+
+# Test for alloc_fits helper
+enable_testing()
+add_executable(alloc_guard_test test/alloc_guard_test.cpp)
+target_include_directories(alloc_guard_test PRIVATE src)
+add_test(NAME alloc_guard_test COMMAND alloc_guard_test)
