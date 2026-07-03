@@ -22,6 +22,7 @@ add_library(itbsdl SHARED
     src/interpose.cpp
     src/screen_gl.cpp
     src/text_freetype.cpp
+    src/os_posix.cpp
     third_party/glew/glew.c
 )
 

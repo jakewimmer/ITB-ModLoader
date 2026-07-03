@@ -272,11 +272,12 @@ static void install_sdl_namespace(lua_State *L) {
       .endNamespace();
 }
 
+extern "C" void register_os_namespace(lua_State *L);
+
 extern "C" int luaopen_itbsdl(lua_State *L) {
   g_lua = L;
   luaL_openlibs(L);
   install_sdl_namespace(L);
-  // TODO: install_os_namespace(L); // wired up in Task 5
-  // TODO: install screen, surface, font, text, mouse, clipboard, resourcedat, blob // Tasks 3-5
+  register_os_namespace(L);
   return 0;
 }
