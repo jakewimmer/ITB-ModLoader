@@ -12,13 +12,14 @@ find_package(Freetype REQUIRED)
 add_subdirectory(third_party/lua-5.1.5)
 
 # Sources grow as later tasks land: Task 2 adds interpose.cpp, Task 3 screen_gl.cpp,
-# Task 4 text_freetype.cpp, Task 5 os_posix.cpp. Task 1 lists only itbsdl.cpp.
+# Task 4 text_freetype.cpp, Task 5 os_posix.cpp.
 add_library(itbsdl SHARED
     src/itbsdl.cpp
+    src/interpose.cpp
 )
 
 target_include_directories(itbsdl PRIVATE
-    src ${CMAKE_CURRENT_SOURCE_DIR}/third_party/LuaBridge
+    src ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.1.5
     ${SDL2_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS})
 
