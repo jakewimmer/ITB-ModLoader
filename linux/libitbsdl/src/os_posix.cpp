@@ -266,7 +266,12 @@ BlobFromFile::BlobFromFile(const std::string &filename) : owned_data(nullptr) {
   }
 
   fseek(file, 0, SEEK_END);
-  size_t size = ftell(file);
+  long file_pos = ftell(file);
+  if (file_pos < 0) {
+    fclose(file);
+    return;
+  }
+  size_t size = static_cast<size_t>(file_pos);
   fseek(file, 0, SEEK_SET);
 
   owned_data = new uint8_t[size];
@@ -303,13 +308,42 @@ void ResourceDat::reload() {
     return;
   }
 
+  /* Stat the file to get its size for bounds checking */
+  struct stat file_stat;
+  if (fstat(fileno(file), &file_stat) != 0) {
+    fclose(file);
+    return;
+  }
+  off_t file_size = file_stat.st_size;
+
   uint32_t indexSize = 0;
   if (fread(&indexSize, sizeof(indexSize), 1, file) != 1) {
     fclose(file);
     return;
   }
 
-  uint32_t *indexOffsets = new uint32_t[indexSize];
+  /* Validate indexSize won't cause allocation overflow.
+   * Header is 4 bytes for indexSize + 4*indexSize for offsets.
+   * Reject if this would exceed file size.
+   */
+  if (indexSize > 0 &&
+      (indexSize > UINT32_MAX / 4 ||
+       4 + (static_cast<off_t>(indexSize) * 4) > file_size)) {
+    fclose(file);
+    return;
+  }
+
+  /* Allocate offsets array with bounds check */
+  uint32_t *indexOffsets = nullptr;
+  try {
+    indexOffsets = new uint32_t[indexSize];
+  } catch (const std::bad_alloc &) {
+    fprintf(stderr, "ResourceDat: allocation failed for %u offsets\n",
+            indexSize);
+    fclose(file);
+    return;
+  }
+
   if (fread(indexOffsets, sizeof(indexOffsets[0]), indexSize, file) !=
       indexSize) {
     delete[] indexOffsets;
@@ -318,6 +352,12 @@ void ResourceDat::reload() {
   }
 
   for (uint32_t i = 0; i < indexSize; i++) {
+    /* Validate offset is within file bounds */
+    if (static_cast<off_t>(indexOffsets[i]) >= file_size ||
+        static_cast<off_t>(indexOffsets[i]) + 8 > file_size) {
+      continue;
+    }
+
     uint32_t size = 0, namesize = 0;
 
     fseek(file, indexOffsets[i], SEEK_SET);
@@ -328,14 +368,38 @@ void ResourceDat::reload() {
       continue;
     }
 
-    std::vector<char> vec(namesize);
-    if (fread(vec.data(), namesize, 1, file) != 1) {
+    /* Validate namesize won't overflow and doesn't exceed file bounds */
+    if (namesize > 1024 * 1024) {  /* Reject unreasonably large names (1MB) */
+      continue;
+    }
+    size_t current_pos = ftell(file);
+    if (current_pos == static_cast<size_t>(-1) ||
+        current_pos + namesize > static_cast<size_t>(file_size)) {
+      continue;
+    }
+
+    /* Validate that offset + header + namesize + size doesn't exceed file */
+    if (static_cast<off_t>(indexOffsets[i]) + 8 + namesize + size >
+        file_size) {
+      continue;
+    }
+
+    std::vector<char> vec;
+    try {
+      vec.assign(namesize, 0);
+    } catch (const std::bad_alloc &) {
+      continue;
+    }
+
+    if (namesize > 0 && fread(vec.data(), namesize, 1, file) != 1) {
       continue;
     }
 
     std::string name(vec.begin(), vec.end());
-    size_t current_pos = ftell(file);
-    index[name] = FileInfo(current_pos, size);
+    size_t file_pos = ftell(file);
+    if (file_pos != static_cast<size_t>(-1)) {
+      index[name] = FileInfo(file_pos, size);
+    }
   }
 
   delete[] indexOffsets;
@@ -367,9 +431,28 @@ BlobFromResourceDat::BlobFromResourceDat(const ResourceDat *dat,
     return;
   }
 
+  /* Reject excessively large allocations up front */
+  if (info.size > 256 * 1024 * 1024) {  /* 256MB limit */
+    fclose(file);
+    data = nullptr;
+    length = 0;
+    return;
+  }
+
   fseek(file, info.offset, SEEK_SET);
 
-  owned_data = new uint8_t[info.size];
+  owned_data = nullptr;
+  try {
+    owned_data = new uint8_t[info.size];
+  } catch (const std::bad_alloc &) {
+    fprintf(stderr, "BlobFromResourceDat: allocation failed for %zu bytes\n",
+            info.size);
+    fclose(file);
+    data = nullptr;
+    length = 0;
+    return;
+  }
+
   length = info.size;
   size_t read_bytes = fread(owned_data, 1, info.size, file);
   fclose(file);
