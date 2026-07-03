@@ -18,10 +18,6 @@
  *      lua_setfield is safe.
  *   3. our_loadlib dlopen()s the path and dlsym()s the entry symbol, returning
  *      the entry as a C function (PUC semantics: on failure nil,msg,"open"|"init").
- *   4. An SDL_GL_SwapWindow interposer logs a periodic frame counter and the
- *      captured L (Phase-3 proof: frame hook fires, L reachable). Only
- *      SDL_PollEvent -- not SDL_PushEvent -- is imported, so Phase 3 input
- *      injection must go through the SDL_PollEvent interceptor.
  *
  * The lua_* functions are the game's own static functions at fixed absolute
  * addresses (non-PIE ET_EXEC binary, no ASLR slide), called as function
@@ -60,14 +56,12 @@ HIDDEN __attribute__((used)) void *g_getfield_addr = (void *)LUA_GETFIELD;
 HIDDEN __attribute__((used)) unsigned char g_orig_bytes[12];
 
 static int g_injected = 0;
-static unsigned long g_frame_count = 0;
 
-/* Real libc/SDL entry points resolved via dlsym(RTLD_NEXT, ...). */
+/* Real libc entry points resolved via dlsym(RTLD_NEXT, ...). */
 static FILE *(*real_fopen)(const char *, const char *) = NULL;
 static FILE *(*real_fopen64)(const char *, const char *) = NULL;
 static int (*real_open)(const char *, int, ...) = NULL;
 static int (*real_open64)(const char *, int, ...) = NULL;
-static void (*real_sdl_gl_swapwindow)(void *) = NULL;
 
 /* ---- logging -------------------------------------------------------------- */
 
@@ -319,20 +313,6 @@ int open64(const char *path, int flags, ...) {
 		return real_open64(path, flags, mode);
 	}
 	return real_open64(path, flags);
-}
-
-/* Phase-3 proof: frame hook fires and the captured L is reachable here. */
-void SDL_GL_SwapWindow(void *window) {
-	if (!real_sdl_gl_swapwindow) {
-		real_sdl_gl_swapwindow = dlsym(RTLD_NEXT, "SDL_GL_SwapWindow");
-	}
-	g_frame_count++;
-	if ((g_frame_count % 300) == 0) {
-		itbboot_log("frame %lu, L=%p", g_frame_count, g_L);
-	}
-	if (real_sdl_gl_swapwindow) {
-		real_sdl_gl_swapwindow(window);
-	}
 }
 
 /* ---- init ----------------------------------------------------------------- */
