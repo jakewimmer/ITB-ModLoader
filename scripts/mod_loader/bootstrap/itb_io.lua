@@ -7,7 +7,11 @@ local function lazy_load()
 	local library = Platform.nativeLibrary("itb_io")
 	try(function()
 		LOG(string.format("Loading %s...", library))
-		package.loadlib(library, "luaopen_itb_io")()
+		local fn, err = package.loadlib(library, "luaopen_itb_io")
+		if not fn then
+			error(string.format("package.loadlib failed: %s", tostring(err)))
+		end
+		fn()
 		factory = itb_io
 		itb_io = nil
 		LOG(string.format("Successfully loaded %s!", library))

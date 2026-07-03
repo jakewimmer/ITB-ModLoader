@@ -8,7 +8,11 @@ local function lazy_load()
 	local library = Platform.nativeLibrary("ftldat")
 	try(function()
 		LOG(string.format("Loading %s...", library))
-		package.loadlib(library, "luaopen_ftldat")()
+		local fn, err = package.loadlib(library, "luaopen_ftldat")
+		if not fn then
+			error(string.format("package.loadlib failed: %s", tostring(err)))
+		end
+		fn()
 		ftldat_rs = ftldat
 		ftldat = nil
 		LOG(string.format("Successfully loaded %s!", library))

@@ -6,6 +6,7 @@ local scripts = {
 	"platform",
 	"itb_io",
 	"io",
+	"sdl",
 	"utils",
 	"event",
 	"modApi",
