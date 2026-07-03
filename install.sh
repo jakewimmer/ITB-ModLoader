@@ -40,5 +40,5 @@ if [[ ${#so_files[@]} -eq 0 ]]; then
 fi
 cp "${so_files[@]}" "$game_dir/"
 
-echo "Installed. For the in-game UI (Phase 3+), set the Steam launch option:"
-echo "  LD_PRELOAD=\"\$PWD/libitbsdl.so\" %command%"
+echo "Installed. To run the game with module loading, set the environment:"
+echo "  LD_PRELOAD=\"./libitbboot.so\" ./Breach"

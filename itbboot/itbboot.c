@@ -143,6 +143,7 @@ static int itbboot_loadlib_cfunc(void *L) {
 	if (!f) {
 		const char *err = dlerror();
 		itbboot_log("dlsym failed for %s in %s: %s", sym, path, err ? err : "(null)");
+		dlclose(h);
 		lua_pushnil(L);
 		lua_pushstring(L, err ? err : "dlsym failed");
 		lua_pushstring(L, "init");
@@ -187,7 +188,11 @@ HIDDEN __attribute__((used)) void itbboot_restore_getfield(void) {
  * Stashes L, restores the original prologue, then jumps to the real function so
  * it re-executes unhooked. Only RAX/flags are clobbered as far as the real
  * function is concerned (all arg registers are push/pop preserved around the
- * restore helper call). */
+ * restore helper call).
+ *
+ * IMPORTANT: The number of pushes MUST remain ODD so RSP ≡ 0 (mod 16) at the
+ * 'call itbboot_restore_getfield' instruction (SysV AMD64 ABI requirement).
+ * Currently: 9 pushes (odd) = correct alignment. */
 extern void itbboot_capture_stub(void);
 __asm__(
 	".text\n\t"
@@ -195,6 +200,7 @@ __asm__(
 	".hidden itbboot_capture_stub\n"
 	"itbboot_capture_stub:\n\t"
 	"movq %rdi, g_L(%rip)\n\t"
+	"pushq %rax\n\t"
 	"pushq %rdi\n\t"
 	"pushq %rsi\n\t"
 	"pushq %rdx\n\t"
@@ -212,6 +218,7 @@ __asm__(
 	"popq %rdx\n\t"
 	"popq %rsi\n\t"
 	"popq %rdi\n\t"
+	"popq %rax\n\t"
 	"movq g_getfield_addr(%rip), %rax\n\t"
 	"jmp *%rax\n\t");
 
@@ -225,6 +232,12 @@ static void itbboot_install_hook(void) {
 	uintptr_t mask = (uintptr_t)ps - 1;
 	uintptr_t start = addr & ~mask;
 	uintptr_t end = (addr + 12 + mask) & ~mask;
+	/* Make .text page RWX for the duration of the process. The stub's
+	 * itbboot_restore_getfield restores and may rewrite the original prologue,
+	 * so this page must remain writable for the lifetime of the hook. This
+	 * trades W^X hardening for the dynamic patching architecture.
+	 * Ideally, we would re-protect to RX after installation, but that would
+	 * require single-step tracing or other complex mechanisms during restore. */
 	if (mprotect((void *)start, end - start, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
 		itbboot_log("mprotect RWX failed at %p: %s -- hook NOT installed", (void *)start,
 			strerror(errno));

@@ -21,3 +21,4 @@ steam_api.dll
 vcruntime140.dll
 modloader.log
 error.txt
+itbboot/libitbboot.so
