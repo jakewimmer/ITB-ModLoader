@@ -167,7 +167,7 @@ Font::Font(const std::string &name, double size_pt) : size(size_pt) {
 }
 
 /* Load FreeType font from a file path */
-FileFont::FileFont(const std::string &filename, double size_pt) : Font("", size_pt) {
+FileFont::FileFont(const std::string &filename, double size_pt) : Font(size_pt) {
   FT_Library lib = getFreeTypeLibrary();
   if (!lib)
     return;
@@ -182,7 +182,7 @@ FileFont::FileFont(const std::string &filename, double size_pt) : Font("", size_
 }
 
 /* Load FreeType font from a memory blob */
-FileFont::FileFont(const Blob *blob, double size_pt) : Font("", size_pt) {
+FileFont::FileFont(const Blob *blob, double size_pt) : Font(size_pt) {
   if (!blob || !blob->data || blob->length == 0) {
     fprintf(stderr, "Invalid blob for FileFont\n");
     return;
@@ -270,8 +270,11 @@ SDL::Surface::Surface(const SDL::Font *font, const SDL::TextSettings *settings,
   int outline_width = s->outlineWidth;
   bool antialias = s->antialias && outline_width == 0;
 
-  /* Determine glyph rendering mode */
+  /* Determine glyph rendering mode and load flags */
   int load_flags = FT_LOAD_RENDER;
+  if (!antialias) {
+    load_flags |= FT_LOAD_TARGET_MONO;
+  }
   FT_Render_Mode render_mode =
       antialias ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO;
 
@@ -323,18 +326,6 @@ SDL::Surface::Surface(const SDL::Font *font, const SDL::TextSettings *settings,
     if (err) {
       fprintf(stderr, "FT_Load_Glyph failed for U+%04X: %d\n", codepoint, err);
       continue;
-    }
-
-    FT_Glyph glyph = nullptr;
-    if (outline_width > 0) {
-      err = FT_Get_Glyph(face->glyph, &glyph);
-      if (err) {
-        fprintf(stderr, "FT_Get_Glyph failed: %d\n", err);
-        continue;
-      }
-
-      FT_Glyph_StrokeBorder(&glyph, stroker, 0, 1);
-      FT_Glyph_To_Bitmap(&glyph, render_mode, nullptr, 1);
     }
 
     /* Advance to next character position */

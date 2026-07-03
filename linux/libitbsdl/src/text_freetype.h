@@ -39,13 +39,17 @@ public:
   float getDescent() const { return descent; }
 
 protected:
-  FT_Face face = nullptr;
   double size = 0;
+  FT_Face face = nullptr;
   float ascent = 0;
   float descent = 0;
 
   /* Memory-resident font data (owned by subclasses) */
   std::vector<uint8_t> fontData;
+
+  /* Protected constructor for subclasses that load their own face.
+   * Initializes size without attempting font resolution. */
+  Font(double size_pt) : size(size_pt), face(nullptr) {}
 
   /* Called by subclasses after loading a face to compute metrics */
   void computeMetrics();
