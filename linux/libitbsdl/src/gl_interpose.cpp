@@ -73,11 +73,16 @@ extern "C" void itbsdl_dispatch_bindtexture(unsigned int target,
 extern "C" void itbsdl_dispatch_teximage2d(unsigned int /*target*/,
                                            int /*internalformat*/, int width,
                                            int height, unsigned int format,
+                                           unsigned int type,
                                            const void *pixels) {
-  /* Match the proxy: only RGBA uploads (4 bytes/pixel) are hashed. Guard NULL
+  /* Match the proxy: only 8-bit RGBA uploads (4 bytes/pixel) are hashed. The
+   * type == GL_UNSIGNED_BYTE check makes the 4-bytes/pixel read explicit and
+   * crash-safe -- a packed type (e.g. GL_UNSIGNED_SHORT_4_4_4_4) with GL_RGBA
+   * carries fewer bytes and must not be read as width*height*4. Guard NULL
    * pixels (storage-only uploads) -- which the proxy does not -- to stay
    * crash-safe; such uploads carry no bytes to match against anyway. */
-  if (format == GL_RGBA && pixels != nullptr && width > 0 && height > 0) {
+  if (format == GL_RGBA && type == GL_UNSIGNED_BYTE && pixels != nullptr &&
+      width > 0 && height > 0) {
     uint64_t hash = SDL::simple_hash(
         pixels, static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
     SDL::texturesMap[g_bound_texture] = hash;

@@ -321,9 +321,15 @@ LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
   1. Launch interactively with the preload; open a text-heavy loader screen.
   2. Launch the same screen on a Windows or Proton reference.
   3. Compare line height, glyph spacing, and outline against the reference.
+  4. Also compare surface **color** parity: Surfaces are stored/hashed in RGBA
+     byte order (Phase 3, commit 3960149) and the color transforms
+     `addOutline`, colormapped, multiply, and grayscale index pixel channels by
+     position. Verify outlined icons, colormapped mech/pilot art, and any
+     grayscale/multiply-tinted surfaces show correct (not R/B-swapped) colors.
 - **Pass observation:** UI text is legible on Linux and matches the Windows/Proton
   reference layout within the adjustments noted in Phase 3, Task 4 (no clipped,
-  overlapping, or missing glyphs).
+  overlapping, or missing glyphs); outlined/colormapped/grayscale/multiply
+  surfaces render with correct colors (no red/blue channel swap).
 
 ### linux-port.AC3.5
 

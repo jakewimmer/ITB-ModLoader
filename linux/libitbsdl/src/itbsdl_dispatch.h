@@ -24,10 +24,12 @@ int itbsdl_dispatch_event(void *evt_voidp);
 /* Track the currently bound GL_TEXTURE_2D name and cache its known hash. */
 void itbsdl_dispatch_bindtexture(unsigned int target, unsigned int texture);
 
-/* Hash an RGBA texture upload into texturesMap[boundTexture]. */
+/* Hash an 8-bit RGBA texture upload into texturesMap[boundTexture]. Only
+ * format == GL_RGBA with type == GL_UNSIGNED_BYTE is hashed (4 bytes/pixel);
+ * other formats/types are ignored. */
 void itbsdl_dispatch_teximage2d(unsigned int target, int internalformat,
                                 int width, int height, unsigned int format,
-                                const void *pixels);
+                                unsigned int type, const void *pixels);
 
 /* Mark the currently bound texture as drawn this frame. */
 void itbsdl_dispatch_draw(void);

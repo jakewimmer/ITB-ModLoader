@@ -384,12 +384,25 @@ int open64(const char *path, int flags, ...) {
  * start. Each shim retries dlsym(RTLD_DEFAULT, ...) every call while the pointer
  * is still NULL, then caches it -- so the hooks begin working the moment
  * libitbsdl loads mid-run, and early frames simply pass through to the real
- * function. Pure C, plain ABI-matching types: no SDL/GL headers here. */
+ * function. Pure C, plain ABI-matching types: no SDL/GL headers here.
+ *
+ * If dlsym(RTLD_NEXT, ...) cannot resolve the real function, the shim logs and
+ * returns rather than calling through a NULL pointer -- the game imports all of
+ * these, so this only guards against a broken load, but it fails with a
+ * diagnostic instead of a segfault.
+ *
+ * Thread-safety: the `static` real/disp pointers use unsynchronized
+ * check-then-set lazy init. That is safe here because SDL/GL calls come from the
+ * game's single render thread; the store is an idempotent pointer-sized write. */
 
 void SDL_GL_SwapWindow(void *window) {
 	static void (*real)(void *) = NULL;
 	if (!real) {
 		real = dlsym(RTLD_NEXT, "SDL_GL_SwapWindow");
+	}
+	if (!real) {
+		itbboot_log("SDL_GL_SwapWindow: real symbol unresolved");
+		return;
 	}
 	static void (*disp)(void) = NULL;
 	if (!disp) {
@@ -405,6 +418,10 @@ int SDL_PollEvent(void *evt) {
 	static int (*real)(void *) = NULL;
 	if (!real) {
 		real = dlsym(RTLD_NEXT, "SDL_PollEvent");
+	}
+	if (!real) {
+		itbboot_log("SDL_PollEvent: real symbol unresolved");
+		return 0;
 	}
 	static int (*disp)(void *) = NULL;
 	if (!disp) {
@@ -430,6 +447,10 @@ void glBindTexture(unsigned int target, unsigned int texture) {
 	if (!real) {
 		real = dlsym(RTLD_NEXT, "glBindTexture");
 	}
+	if (!real) {
+		itbboot_log("glBindTexture: real symbol unresolved");
+		return;
+	}
 	static void (*disp)(unsigned int, unsigned int) = NULL;
 	if (!disp) {
 		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_bindtexture");
@@ -448,12 +469,17 @@ void glTexImage2D(unsigned int target, int level, int internalformat, int width,
 	if (!real) {
 		real = dlsym(RTLD_NEXT, "glTexImage2D");
 	}
-	static void (*disp)(unsigned int, int, int, int, unsigned int, const void *) = NULL;
+	if (!real) {
+		itbboot_log("glTexImage2D: real symbol unresolved");
+		return;
+	}
+	static void (*disp)(unsigned int, int, int, int, unsigned int, unsigned int,
+		const void *) = NULL;
 	if (!disp) {
 		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_teximage2d");
 	}
 	if (disp) {
-		disp(target, internalformat, width, height, format, pixels);
+		disp(target, internalformat, width, height, format, type, pixels);
 	}
 	real(target, level, internalformat, width, height, border, format, type, pixels);
 }
@@ -462,6 +488,10 @@ void glDrawArrays(unsigned int mode, int first, int count) {
 	static void (*real)(unsigned int, int, int) = NULL;
 	if (!real) {
 		real = dlsym(RTLD_NEXT, "glDrawArrays");
+	}
+	if (!real) {
+		itbboot_log("glDrawArrays: real symbol unresolved");
+		return;
 	}
 	static void (*disp)(void) = NULL;
 	if (!disp) {
@@ -478,6 +508,10 @@ void glDrawElements(unsigned int mode, int count, unsigned int type,
 	static void (*real)(unsigned int, int, unsigned int, const void *) = NULL;
 	if (!real) {
 		real = dlsym(RTLD_NEXT, "glDrawElements");
+	}
+	if (!real) {
+		itbboot_log("glDrawElements: real symbol unresolved");
+		return;
 	}
 	static void (*disp)(void) = NULL;
 	if (!disp) {

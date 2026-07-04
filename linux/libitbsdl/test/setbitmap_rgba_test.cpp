@@ -11,7 +11,6 @@
  * symbols are never called here (lazy binding, unresolved-symbols=ignore-all). */
 #include "../src/screen_gl.h"
 
-#include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -29,15 +28,25 @@ int main() {
   TestSurface s;
   s.setBitmap(rgba, 0, 0, 2, 1, 2 * 4);
 
-  assert(s.pixelData != nullptr);
+  /* Explicit checks (not assert) so the guard stays live under -DNDEBUG. */
+  if (s.pixelData == nullptr) {
+    printf("FAIL: setBitmap produced no pixelData\n");
+    return 1;
+  }
 
   /* Stored bytes must be identical to the source -- no channel swap. */
-  assert(std::memcmp(s.pixelData, rgba, sizeof(rgba)) == 0);
+  if (std::memcmp(s.pixelData, rgba, sizeof(rgba)) != 0) {
+    printf("FAIL: setBitmap did not store pixels in source (RGBA) order\n");
+    return 1;
+  }
   printf("PASS: setBitmap stores pixels in source (RGBA) byte order\n");
 
   /* Hash must be computed over those exact RGBA bytes, matching the value the
    * GL interposer computes for a game texture uploaded with the same pixels. */
-  assert(s.hash == SDL::simple_hash(rgba, sizeof(rgba)));
+  if (s.hash != SDL::simple_hash(rgba, sizeof(rgba))) {
+    printf("FAIL: hash does not cover the RGBA bytes\n");
+    return 1;
+  }
   printf("PASS: hash covers RGBA bytes (matches game-texture hashing path)\n");
 
   return 0;
