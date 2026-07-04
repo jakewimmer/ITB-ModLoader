@@ -140,6 +140,16 @@ Tuple semantics (from `options.cpp:76-101`): `[1]` byte offset, `[2]` access
 - Create: `memedit/CMakeLists.txt` (Linux build; static PUC Lua 5.1.5)
 - Copy artifact into: `/var/home/displacer/Projects/clones/ITB-ModLoader/memedit.so`
 
+> **Execution revision 2026-07-03 (supersedes "static PUC Lua 5.1.5" below):** per the
+> single-runtime architecture adopted in Phase 3, `memedit.so` must NOT vendor its own Lua.
+> Like `libitbsdl`, compile against the Lua 5.1 headers but do **not** link the Lua `.c`
+> sources — leave `lua_*` undefined, resolved at load from `libitbboot`'s exported absolute
+> symbols (the game's single Lua/GC). A vendored Lua here would reintroduce the multi-GC
+> heap corruption that broke `ftldat`. Verify `nm memedit.so` shows **0** internal Lua
+> runtime symbols (`luaH_free`/`sweeplist`/`luaC_step`) and `lua_*` undefined. `memedit.so`
+> loads via the injected `package.loadlib` → `dlopen`, so its `lua_*` bind to `libitbboot`
+> in the global scope, same as `libitbsdl`.
+
 **Implementation:**
 
 The port is mechanical — the Windows-specific surface is tiny (`codebase-investigator`
