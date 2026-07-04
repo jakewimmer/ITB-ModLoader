@@ -11,18 +11,20 @@ exact observation that confirms a pass.
 The project has no standalone Lua test runner. Lua tests run only in-game through
 the `Tests.Runner` console (`scripts/mod_loader/tests/`). CI does not run tests; it
 only builds and packages. Consequently most loader-level criteria are verified by
-running the real game and observing `~/.local/share/IntoTheBreach/modloader.log` or
+running the real game and observing `~/.local/share/IntoTheBreach/log.txt` or
 the UI. The genuinely automated checks are: the Rust crates' `cargo test`
-(`ftldat-rs`, `itb-io-rs`), the offset-derivation tool's `pytest` (fixture-based),
-the in-game `platform` testsuite, and shell/workflow linting
-(`shellcheck`/`shfmt`/`actionlint`).
+(`ftldat-rs`, `itb-io-rs`), the in-game `platform` testsuite, the `libitbsdl`
+`ctest` suite (incl. the RGBA hash-parity test, run in CI), and shell/workflow
+linting (`shellcheck`/`shfmt`/`actionlint`). memedit offset derivation (AC4.4/AC4.5)
+is a runtime calibration step, not an automated test — the static offset tool was
+skipped (superseded by memedit's scanner).
 
 **Counts (26 criteria):**
 
 | Verification type | Count | Criteria |
 |---|---|---|
-| Automated | 6 | AC1.2, AC4.4, AC4.5, AC5.1, AC6.1, AC6.3 |
-| Human/Manual | 20 | AC1.1, AC1.3, AC1.4, AC1.5, AC2.1, AC2.2, AC2.3, AC2.4, AC3.1, AC3.2, AC3.3, AC3.4, AC3.5, AC4.1, AC4.2, AC4.3, AC5.2, AC6.2, AC6.4, AC7.1 |
+| Automated | 4 | AC1.2, AC5.1, AC6.1, AC6.3 |
+| Human/Manual | 22 | AC1.1, AC1.3, AC1.4, AC1.5, AC2.1, AC2.2, AC2.3, AC2.4, AC3.1, AC3.2, AC3.3, AC3.4, AC3.5, AC4.1, AC4.2, AC4.3, AC4.4, AC4.5, AC5.2, AC6.2, AC6.4, AC7.1 |
 
 "Automated" means the criterion's core claim is confirmed by a test or lint that
 runs without human judgment. Several Human/Manual criteria also carry automated
@@ -51,7 +53,7 @@ is a runtime behavior of the live game.
 
 ```bash
 GAME="/var/mnt/2891f9ef-34b4-4d43-9dbf-c91b2ac9c36e/SteamLibrary/steamapps/common/Into the Breach"
-LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
+LOG="$HOME/.local/share/IntoTheBreach/log.txt"
 ```
 
 ---
@@ -227,10 +229,10 @@ LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
 - **Procedure:**
   1. Boot headless once; create or observe a profile.
   2. `ls ~/.local/share/IntoTheBreach/` — confirm `profile_*`, `settings.lua`,
-     `modloader.log`.
+     `log.txt`.
   3. Quit, boot again, and re-list the directory.
 - **Pass observation:** The save directory is `~/.local/share/IntoTheBreach`, and the
-  profile and `modloader.log` persist across the restart (not recreated empty).
+  profile and `log.txt` persist across the restart (not recreated empty).
 
 ### linux-port.AC2.4
 
@@ -246,7 +248,7 @@ LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
   1. `NON_ASCII_HOME="/tmp/claude/itb-café-home"; mkdir -p "$NON_ASCII_HOME"`.
   2. `( cd "$GAME" && HOME="$NON_ASCII_HOME" xvfb-run -a ./Breach ) &`; let it boot,
      then stop it.
-  3. `grep -n "café" "$NON_ASCII_HOME/.local/share/IntoTheBreach/modloader.log"`.
+  3. `grep -n "café" "$NON_ASCII_HOME/.local/share/IntoTheBreach/log.txt"`.
 - **Pass observation:** The log file exists under the non-ASCII path and boot
   proceeds with no crash or Lua traceback. (A crash here is an `itb-io-rs`
   path-handling bug against Phase 1, Task 6.)
@@ -271,10 +273,10 @@ LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
 - **Produced by:** Phase 3, Task 6.
 - **Procedure:**
   1. Stage `libitbsdl.so` into `$GAME` and launch interactively:
-     `( cd "$GAME" && LD_PRELOAD="$PWD/libitbsdl.so" ./Breach )`.
+     `( cd "$GAME" && LD_PRELOAD="$PWD/libitbboot.so" ./Breach )`.
   2. Open the mod-config menu.
   3. Add a temporary frame counter `LOG` in an `onFrameDrawn` subscriber and watch
-     `modloader.log`.
+     `log.txt`.
 - **Pass observation:** The mod-config menu renders on screen, and the frame-counter
   log line advances every frame (confirming `onFrameDrawStart`/`onFrameDrawn` fire).
 
@@ -404,51 +406,48 @@ LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
   2. Enable easyEdit, boot the native game with the Phase 3 preload in place.
   3. Open the easyEdit menu and use a representative tool.
 - **Pass observation:** The easyEdit menu opens, a representative tool works, and
-  `modloader.log` shows easyEdit initialized without error.
+  `log.txt` shows easyEdit initialized without error.
 
 ### linux-port.AC4.4
 
 > **Success:** The offset generator regenerates the table from the binary's DWARF
 > `debug_info`.
 
-- **Verification type:** Automated (with manual full-table completion).
-- **Reinterpretation (evidence-backed, per Phase 4 verdict):** The game's own struct
-  layouts are **absent from DWARF** — `.debug_str` contains none of
-  `Pawn`/`Board`/`Tile`/`Weapon`/`SpaceDamage`, and all DWARF `structure_type` DIEs
-  belong to statically-linked third-party libraries. The offset table is therefore
-  derived from the binary's **luabind `def_readwrite` registrations + symbol table +
-  gdb-assisted reverse engineering**, not DWARF. The tool automates the derivable
-  portion (the 22 luabind-exposed fields) and marks the rest `TODO`; completing those
-  `TODO`s is manual RE.
-- **Test type:** `pytest` (fixture-based) for the extraction logic; a tool run
-  against the real binary for the derivable subset.
-- **Test file / command:**
-  - `cd /var/home/displacer/Projects/clones/memedit/tools/derive_offsets && uv run pytest -q`
-    (feeds a small fixture ELF with a known luabind registration and asserts the
-    extracted offset; does **not** parse the 355 MB game binary in unit tests).
-  - `uv run derive_offsets.py "$GAME/Breach" -o /tmp/claude/__addresses_linux.lua`
-    then `ruff check . && ty check`.
-- **Produced by:** Phase 4, Task 2.
-- **Pass criteria:** `pytest` passes; the 22 luabind-exposed fields are derived with
-  real offsets against the binary; unexposed fields appear as explicit `TODO`s; lints
-  and types are clean. Full completion of all ~99 offsets is ongoing manual RE (ships
-  a validated subset with Proton as the fallback for the remainder).
+- **Verification type:** Human/Manual (in-game calibration run).
+- **Reinterpretation (evidence-backed; supersedes the DWARF and static-tool wording):**
+  The game's struct layouts are **absent from DWARF**, and only ~22 non-priority
+  fields are luabind-exposed — so no static pass can regenerate the table. memedit
+  ships a **runtime scanner** (`scanner/*.lua`) that derives every offset live: it
+  mutates a known field through the game API and scans the object's bytes for the
+  change. That calibration IS the regeneration mechanism (the same one memedit uses
+  on Windows for a new game version); the static `tools/derive_offsets` tool is
+  **skipped** as superseded (Phase 4 Task 2 revision), left only as an optional
+  luabind-subset cross-check. See the memedit submodule's `LINUX_OFFSETS.md`.
+- **Produced by:** Phase 4, Task 3 (memedit wiring + `__addresses_linux.lua`).
+- **Procedure:** Enable memedit on native Linux, enter a mission, run memedit's
+  Calibrate; it writes the derived offsets to `__addresses_linux.lua` for the current
+  game version. Re-running the game shows "Initialized successfully".
+- **Pass observation:** Calibration completes and `__addresses_linux.lua` gains a
+  populated bucket for the running game version; memedit loads calibrated. Full
+  completion is per-game-version calibration; Proton is the fallback for any field
+  not yet calibrated.
 
 ### linux-port.AC4.5
 
 > **Failure:** A binary whose symbols the generator cannot resolve fails with a
 > diagnostic identifying the missing symbol, not a silent wrong offset.
 
-- **Verification type:** Automated.
-- **Test type:** `pytest` (fixture-based).
-- **Test file / command:**
-  `cd /var/home/displacer/Projects/clones/memedit/tools/derive_offsets && uv run pytest -q`.
-  A fixture with a deliberately missing anchor symbol asserts the tool exits non-zero
-  with an explicit message naming the missing symbol/field. Every field is either
-  derived, an explicit `TODO`, or a named hard error — never a guessed or zero offset.
-- **Produced by:** Phase 4, Task 2.
-- **Pass criteria:** The missing-anchor fixture produces a non-zero exit and an error
-  message naming the unresolved symbol; the test asserting this passes.
+- **Verification type:** Human/Manual (by design of the scanner mechanism).
+- **Reinterpretation:** With the static tool skipped, this criterion is met by the
+  runtime scanner's fail-safe: an offset that is not calibrated is left absent, so
+  memedit boots **uncalibrated and prompts for calibration** rather than reading a
+  guessed or zero offset. `__addresses_linux.lua` ships empty; unvalidated Windows
+  offsets are deliberately not copied in (a wrong offset would read/write arbitrary
+  memory). There is no silent wrong-offset path.
+- **Produced by:** Phase 4, Task 3.
+- **Pass observation:** With an empty/partial `__addresses_linux.lua`, memedit logs
+  "Initialization incomplete - Calibration required!" and does not expose a
+  calibrated table — never a wrong-offset read/write.
 
 ---
 
@@ -540,7 +539,7 @@ LOG="$HOME/.local/share/IntoTheBreach/modloader.log"
   1. Start from a clean copy of the native game (restore from the Phase 2 backup or a
      second install).
   2. Unpack the CI Linux bundle; run `./install.sh "$GAME"`.
-  3. Set the Steam launch option `LD_PRELOAD="$PWD/libitbsdl.so" %command%` (or launch
+  3. Set the Steam launch option `LD_PRELOAD="$PWD/libitbboot.so" %command%` (or launch
      directly with the same preload), and start the game interactively.
 - **Pass observation:** The loader boots and the in-game UI renders on a fresh
   install.
@@ -620,4 +619,15 @@ Record each manual/reference run here as it is performed (date, platform, result
 
 | Date | Criterion | Platform | Result | Notes |
 |---|---|---|---|---|
-| | | | | |
+| 2026-07-03 | AC1.1 | Native Linux | PASS | In-game log shows `MOD-API VERSION 2.9.5`, `LOADING MODS`, boot reached `onModsLoaded` end-to-end. |
+| 2026-07-03 | AC2.1 | Native Linux | PASS | `LINUX_SMOKE_MOD_RAN` observed in log; user mod init + `onModsLoaded` handler ran. |
+| 2026-07-03 | AC3.4 (color) | Native Linux | PASS | `setbitmap_rgba_test` hash-parity ctest green; RGBA byte-order surfaces confirmed. |
+| 2026-07-03 | AC6.2 | Native Linux | PASS | Preload boots the loader; in-game UI verified by executing engineer. |
+| 2026-07-03 | AC6.3 | Native Linux | PASS | install -> uninstall restores vanilla; fixture round-trip verified. |
+| 2026-07-03 | AC6.4 | Native Linux | PASS | No preload: loader self-reports "not LD_PRELOADed"/native features disabled; no crash. |
+| 2026-07-03 | Single-runtime | Native Linux | PASS | `nm` assertion: native libs share the game's Lua (no vendored `lua_State`). |
+| — | AC4.2 | Native Linux | PENDING | Needs in-mission calibration to derive `__addresses_linux.lua` (ships empty by design). |
+| — | AC4.3 | Native Linux | PENDING | easyEdit in-game session not yet run. |
+| — | AC3.4 (text) | Windows/Proton ref | PENDING | No Windows/Proton reference install available for FreeType-vs-GDI+ parity. |
+| — | AC1.5 | Windows/Proton ref | PENDING | No Windows machine available; gates upstream PR. |
+| — | AC5.2 | Windows/Proton ref | PENDING | No Windows machine available; gates upstream PR. |
