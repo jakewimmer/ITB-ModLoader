@@ -273,10 +273,11 @@ bool Surface::isValid() const {
 uint32_t Surface::texture() {
   if (textureId == 0 && isValid()) {
     /* glTexture() binds the new texture and calls glTexImage2D, which routes
-     * through the interposed glTexImage2D (gl_interpose.cpp) and records
-     * texturesMap[textureId] = simple_hash(pixelData) -- the same value as
-     * this->hash. The game's own textures are hashed by the identical path, so
-     * a Surface and an identically-pixelled game texture share one hash. */
+     * through libitbboot's glTexImage2D interposer into itbsdl_dispatch_teximage2d
+     * (gl_interpose.cpp) and records texturesMap[textureId] = simple_hash(pixelData)
+     * -- the same value as this->hash. The game's own textures are hashed by the
+     * identical path, so a Surface and an identically-pixelled game texture share
+     * one hash. */
     textureId = glTexture(pixelData, width, height);
   }
   return textureId;

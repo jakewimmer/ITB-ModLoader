@@ -1,15 +1,12 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-#include <dlfcn.h>
 #include <cstdint>
 #include <cstddef>
 
 #include "screen_gl.h"
 #include "glew.h"
+#include "itbsdl_dispatch.h"
 
 /*
- * Game OpenGL draw interposition.
+ * Game OpenGL draw tracking.
  *
  * The mod loader gates onInitialLoadingFinished -> onModsLoaded on detecting
  * the game's main-menu background as drawn, via Surface::wasDrawn() checking
@@ -29,11 +26,13 @@
  * (no immediate mode, no shaders) -- so those calls are the correct per-draw
  * trigger here.
  *
- * These symbols are exported with default visibility so that, under LD_PRELOAD,
- * they interpose the game's libGL (GLVND) calls -- the same mechanism already
- * used for SDL_GL_SwapWindow / SDL_PollEvent. Intra-library calls from
- * screen_gl.cpp (Surface texture uploads) also route through here, so a
- * Surface's hash and a game texture's hash are produced by the identical path.
+ * These are exposed as exported dispatch entry points (itbsdl_dispatch_*), not
+ * as GL interposers. libitbsdl no longer interposes glBindTexture / glTexImage2D
+ * / glDrawArrays / glDrawElements; the thin libitbboot preload does, and forwards
+ * here. screen_gl.cpp's own glBindTexture / glTexImage2D calls (Surface texture
+ * uploads) are left undefined in this library and bind at load time to the same
+ * libitbboot interposers, which forward back here -- so a Surface's texturesMap
+ * entry and a game texture's are produced by the identical hashing path.
  */
 
 namespace {
@@ -59,10 +58,8 @@ void mark_bound_texture_drawn() {
 
 }  // namespace
 
-extern "C" void glBindTexture(GLenum target, GLuint texture) {
-  static void (*real)(GLenum, GLuint) =
-      (void (*)(GLenum, GLuint))dlsym(RTLD_NEXT, "glBindTexture");
-
+extern "C" void itbsdl_dispatch_bindtexture(unsigned int target,
+                                            unsigned int texture) {
   if (target == GL_TEXTURE_2D) {
     g_bound_texture = texture;
     /* Cache the hash for this texture to avoid redundant lookups in draw calls.
@@ -71,17 +68,12 @@ extern "C" void glBindTexture(GLenum target, GLuint texture) {
     auto iter = SDL::texturesMap.find(texture);
     g_current_bound_hash = (iter != SDL::texturesMap.end()) ? iter->second : 0;
   }
-  real(target, texture);
 }
 
-extern "C" void glTexImage2D(GLenum target, GLint level, GLint internalformat,
-                             GLsizei width, GLsizei height, GLint border,
-                             GLenum format, GLenum type, const GLvoid *pixels) {
-  static void (*real)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum,
-                      GLenum, const GLvoid *) =
-      (void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum,
-                const GLvoid *))dlsym(RTLD_NEXT, "glTexImage2D");
-
+extern "C" void itbsdl_dispatch_teximage2d(unsigned int /*target*/,
+                                           int /*internalformat*/, int width,
+                                           int height, unsigned int format,
+                                           const void *pixels) {
   /* Match the proxy: only RGBA uploads (4 bytes/pixel) are hashed. Guard NULL
    * pixels (storage-only uploads) -- which the proxy does not -- to stay
    * crash-safe; such uploads carry no bytes to match against anyway. */
@@ -90,24 +82,6 @@ extern "C" void glTexImage2D(GLenum target, GLint level, GLint internalformat,
         pixels, static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
     SDL::texturesMap[g_bound_texture] = hash;
   }
-  real(target, level, internalformat, width, height, border, format, type,
-       pixels);
 }
 
-extern "C" void glDrawArrays(GLenum mode, GLint first, GLsizei count) {
-  static void (*real)(GLenum, GLint, GLsizei) =
-      (void (*)(GLenum, GLint, GLsizei))dlsym(RTLD_NEXT, "glDrawArrays");
-
-  mark_bound_texture_drawn();
-  real(mode, first, count);
-}
-
-extern "C" void glDrawElements(GLenum mode, GLsizei count, GLenum type,
-                               const GLvoid *indices) {
-  static void (*real)(GLenum, GLsizei, GLenum, const GLvoid *) =
-      (void (*)(GLenum, GLsizei, GLenum,
-                const GLvoid *))dlsym(RTLD_NEXT, "glDrawElements");
-
-  mark_bound_texture_drawn();
-  real(mode, count, type, indices);
-}
+extern "C" void itbsdl_dispatch_draw(void) { mark_bound_texture_drawn(); }
