@@ -47,31 +47,46 @@ uv run extract_offsets.py "/path/to/Into the Breach/Breach" --class Pawn --valid
 uv run extract_offsets.py "/path/to/Into the Breach/Breach" --class BoardSpace
 ```
 
-## Status / remaining work to produce a complete table
+## What this reliably covers (and what it can't)
 
-Prototype: extracts field offsets for `Set<Field>` methods and cross-checks
-against runtime values. Still to do before it can emit a full, trustworthy
-`__addresses_linux.lua`:
+The setter approach is **safe by construction**: it only reports an offset when a
+setter cleanly stores its argument (preferably to an offset it also reads back).
+It never falls back to a guess -- a confidently-wrong memory offset is worse than
+an honest "unresolved". Validated against runtime: Pawn Powered/Team/Corpse/Minor
+match exactly.
 
-1. **Refine the bool-setter heuristic.** A few bool fields (Acid/Frozen/Lava)
-   currently resolve to a shared offset because the leading `cmpb $0x0,OFF(%rdi)`
-   is a common status compare; prefer the actual argument store, and for status
-   bits also recover the bit index (these are likely bitflags in one byte).
-2. **Map game field names to memedit field names.** Most are 1:1 (Fire, Acid,
-   Terrain, Powered, Team, ...); a few differ (BonusMove <-> BonusShift) and some
-   memedit fields are read via non-`Set` accessors or are computed.
-3. **Struct sizes** (`size_pawn`, `size_tile`, `size_weapon`, `size_board`,
-   `size_space_damage`): read the `operator new` size in each class's allocating
-   constructor, or the array stride.
-4. **Tile addressing** (`delta_rows`, `step_rows`, `size_tile`): disassemble
-   `Board::GetTerrain(Point)` / `Board::SetTerrain(Point,int)` to see how the game
-   computes a `BoardSpace*` from `(x,y)` -- that gives the board->tile layout the
-   runtime scanner mis-derived.
-5. **Datatype + access tuple**: memedit stores `{offset, access, datatype}` per
-   field; datatype can be inferred from the setter's argument type (bool/int/
-   float/std::string/const char*) and access from whether get/set exist.
-6. Emit `__addresses_linux.lua` keyed by game version (`modApi.gameVersion`,
-   currently 1.2.93).
+It handles clean scalar setters well (most of `pawn`), but three categories are
+**not** derivable this way, as the disassembly makes clear:
 
-This path needs **no interactive game session** and is the recommended way to
-complete Linux memedit calibration.
+- **Fields with no `Set*` symbol.** e.g. `Pawn::Teleporter` has no setter; it is
+  written via computed/loadout code. ~9 pawn fields and most `weapon` fields are
+  like this. They need offsets from getters, constructors, or use-sites instead.
+- **Side-effecting status bools.** `BoardSpace::SetFrozen` never stores its
+  argument to a plain offset -- it reads sibling status (Acid `0x296c`, Terrain
+  `0x2998`) and computes the frozen state elsewhere. And `SetAcid` writes both a
+  shared state byte (`0x296c`, read+written) and an acid-specific byte (`0x29a9`,
+  write-only); which one memedit wants needs in-game confirmation.
+- **POD structs with no methods.** `spaceDamage` is a plain struct accessed by
+  direct member reference; there are no setters to disassemble. Its offsets must
+  come from the `SpaceDamage` constructor's member initialisation, and the
+  `vital` struct sizes from each class's `operator new`.
+
+## Remaining work to a complete, trustworthy `__addresses_linux.lua`
+
+memedit's loader is **all-or-nothing**: it marks itself calibrated only if *every*
+field in *every* category resolves (see `memedit.lua` `load()`). So the table must
+be both complete and correct before it activates -- a validated subset does not
+turn memedit on. To finish:
+
+1. Map the resolved game names to memedit field names (mostly 1:1; `BonusMove` <->
+   `BonusShift`; reuse `[2]` access and `[3]` datatype from the Windows
+   `__addresses.lua` -- they are ABI-invariant, only the offset changes).
+2. Recover the no-setter fields (weapon members, remaining pawn fields) from
+   getters/use-sites, and the `spaceDamage`/`vital` values from constructors and
+   `operator new`.
+3. Disambiguate the shared-state status bools (Acid/Frozen/Fire/Shield) and
+   validate every offset in a throwaway mission before trusting it -- wrong
+   offsets corrupt live game state. This validation step needs the game running.
+
+Static extraction gives trustworthy *candidates* with no interactive session; the
+final disambiguation and safety validation still want one in-game pass.

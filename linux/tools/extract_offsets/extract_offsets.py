@@ -25,16 +25,40 @@ import re
 import subprocess
 import sys
 
-# Registers that carry the first real argument (arg after the implicit `this`),
-# across widths, plus common callee-saved regs an argument gets copied into.
-_ARG_SEED = {"esi", "sil", "si", "rsi"}
+# x86-64 register aliases -> their 64-bit base, so `%esi`, `%sil`, `%si` and
+# `%rsi` all track as one value through width changes.
+_REG_BASE: dict[str, str] = {}
+for _base, _aliases in {
+    "rax": ("eax", "ax", "al", "ah"),
+    "rbx": ("ebx", "bx", "bl", "bh"),
+    "rcx": ("ecx", "cx", "cl", "ch"),
+    "rdx": ("edx", "dx", "dl", "dh"),
+    "rsi": ("esi", "si", "sil"),
+    "rdi": ("edi", "di", "dil"),
+    "rbp": ("ebp", "bp", "bpl"),
+    "rsp": ("esp", "sp", "spl"),
+    **{f"r{n}": (f"r{n}d", f"r{n}w", f"r{n}b") for n in range(8, 16)},
+}.items():
+    _REG_BASE[_base] = _base
+    for _a in _aliases:
+        _REG_BASE[_a] = _base
+
+
+def _base(reg: str) -> str:
+    """Canonical 64-bit name for a register alias (esi/sil/si -> rsi)."""
+    return _REG_BASE.get(reg, reg)
 
 # Runtime-derived offsets (from the in-game scanner) used to sanity-check the
 # static extraction. Class::Field -> offset.
+# Only fields with a clean, single-store setter belong here -- these are what the
+# static method can derive and validate. Fields set via computed logic or with no
+# setter at all (e.g. Pawn::Teleporter has no Set* symbol) are out of scope for
+# this tool and must come from another source.
 _RUNTIME_CHECK: dict[str, int] = {
     "Pawn::Powered": 0x10D4,
     "Pawn::Team": 0xD0,
-    "Pawn::Teleporter": 0x1321,
+    "Pawn::Corpse": 0xFB0,
+    "Pawn::Minor": 0x10F0,
 }
 
 
@@ -78,34 +102,57 @@ def _disassemble(binary: str, addr: int, length: int = 0x120) -> list[str]:
 def extract_setter_offset(binary: str, addr: int) -> int | None:
     """Recover the field offset a setter writes to.
 
-    Tracks the `this` pointer (starts in %rdi) and the argument (starts in the
-    %rsi family) through simple register copies, then returns the offset of the
-    first store of the argument into `this`, or the first `cmpb $0x0,OFF(%rdi)`
-    (bool setters compare the current value first).
+    Status setters have side effects -- Board/BoardSpace freeze/acid/fire setters
+    read *sibling* status fields (freezing clears acid, etc.), so the first
+    `cmpb OFF(%rdi)` is often a different field. The reliable signal is the offset
+    the setter both *reads* and *writes with its own argument*: e.g. SetAcid does
+    `cmpb $0x0,0x296c(%rdi)` (read) and `mov %sil,0x296c(%rdi)` (write) -- 0x296c
+    is Acid, while 0x29a9 (written but never read) is a dirty flag.
+
+    Tracks `this` (from %rdi) and the argument (from the %rsi family) through
+    register copies with width-aware aliasing, then prefers the read-and-written
+    offset, falling back to the first argument store, then the first read.
     """
-    this_regs = {"rdi", "edi"}
-    arg_regs = set(_ARG_SEED)
+    this_regs = {"rdi"}
+    arg_regs = {"rsi"}
+    read_offsets: set[int] = set()
+    arg_writes: list[int] = []
     for insn in _disassemble(binary, addr):
         if insn.startswith("ret"):
             break
-        # this-pointer copy: mov %rdi,%rXX
-        m = re.match(r"mov\s+%(rdi|edi),%(\w+)", insn)
+        # register-to-register copy: propagate this / arg through the alias.
+        m = re.match(r"mov\s+%(\w+),%(\w+)$", insn)
         if m:
-            this_regs.add(m.group(2))
+            src, dst = _base(m.group(1)), _base(m.group(2))
+            if src in this_regs:
+                this_regs.add(dst)
+            elif src in arg_regs:
+                arg_regs.add(dst)
+            elif dst in arg_regs:
+                arg_regs.discard(dst)  # arg reg overwritten by something else
             continue
-        # argument copy: mov %<arg>,%rXX
-        m = re.match(r"mov\s+%(\w+),%(\w+)", insn)
-        if m and m.group(1) in arg_regs:
-            arg_regs.add(m.group(2))
+        # read of a field: cmp/mov FROM OFF(%this)
+        m = re.match(r"(?:cmp|mov)\w*\s+\$?[^,]*,?\s*(0x[0-9a-f]+)\(%(\w+)\)", insn)
+        if m and _base(m.group(2)) in this_regs and insn.startswith("cmp"):
+            read_offsets.add(int(m.group(1), 16))
             continue
-        # store the argument into this: mov %<arg>,0xNN(%<this>)
-        m = re.match(r"mov\s+%(\w+),(0x[0-9a-f]+)\((?:%(\w+))\)", insn)
-        if m and m.group(1) in arg_regs and m.group(3) in this_regs:
-            return int(m.group(2), 16)
-        # bool setter's leading compare of the current value
-        m = re.match(r"cmpb?\s+\$0x0,(0x[0-9a-f]+)\(%(?:rdi|edi)\)", insn)
-        if m:
-            return int(m.group(1), 16)
+        m = re.match(r"mov\w*\s+(0x[0-9a-f]+)\(%(\w+)\),%\w+", insn)
+        if m and _base(m.group(2)) in this_regs:
+            read_offsets.add(int(m.group(1), 16))
+            continue
+        # store OF THE ARGUMENT into this: mov %<arg>,OFF(%<this>)
+        m = re.match(r"mov\w*\s+%(\w+),(0x[0-9a-f]+)\(%(\w+)\)", insn)
+        if m and _base(m.group(1)) in arg_regs and _base(m.group(3)) in this_regs:
+            arg_writes.append(int(m.group(2), 16))
+    # Prefer the offset the setter both reads and writes with its argument (the
+    # canonical field). Else a unique argument store. Never fall back to a
+    # read-only offset: for side-effecting setters that is a *sibling* field, and
+    # a confidently-wrong memory offset is worse than an honest "unresolved".
+    both = [w for w in arg_writes if w in read_offsets]
+    if both:
+        return both[0]
+    if len(set(arg_writes)) == 1:
+        return arg_writes[0]
     return None
 
 
