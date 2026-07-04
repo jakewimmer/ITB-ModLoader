@@ -9,6 +9,14 @@ if Platform.name ~= "linux" then
   return
 end
 
+-- Graceful degradation (AC6.4): without the libitbboot.so preload, package.loadlib
+-- is nil and the loader UI cannot register. Self-report and skip rather than
+-- failing the bootstrap, so the game still runs.
+if not Platform.nativePreloadActive() then
+  LOG(Platform.preloadHint())
+  return
+end
+
 local function load_itbsdl()
   local library = Platform.nativeLibrary("itbsdl")
   try(function()

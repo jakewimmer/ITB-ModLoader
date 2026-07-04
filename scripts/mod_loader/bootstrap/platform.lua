@@ -42,3 +42,34 @@ function Platform.nativeLibrary(logical_name)
 
 	return filename
 end
+
+-- On Linux the native libraries load via package.loadlib. The game's embedded
+-- Lua ships a stub package.loadlib that always errors "dynamic libraries not
+-- enabled" (built without LUA_DL); libitbboot.so, preloaded via the LD_PRELOAD
+-- launch option, replaces it with a working dlopen-backed loader. Both are
+-- functions, so probe the behaviour: load a path that cannot exist and check
+-- whether the error is the stock "not enabled" message (preload absent) or a
+-- dlopen error (preload active). Always true on Windows.
+local preloadActive
+function Platform.nativePreloadActive()
+	if preloadActive ~= nil then
+		return preloadActive
+	end
+	if Platform.name ~= "linux" then
+		preloadActive = true
+	elseif type(package.loadlib) ~= "function" then
+		preloadActive = false
+	else
+		local _, err = package.loadlib("/nonexistent-itbboot-preload-probe.so", "x")
+		preloadActive = not (type(err) == "string"
+			and err:find("dynamic libraries not enabled"))
+	end
+	return preloadActive
+end
+
+-- Actionable one-line hint pointing at the Steam launch option, for logging when
+-- the preload is missing.
+function Platform.preloadHint()
+	return "libitbboot.so is not LD_PRELOADed -- set the Steam launch option "
+		.. "'LD_PRELOAD=\"$PWD/libitbboot.so\" %command%'. Native features are disabled."
+end

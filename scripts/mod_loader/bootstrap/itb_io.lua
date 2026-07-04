@@ -4,6 +4,12 @@ local function lazy_load()
 		return
 	end
 
+	-- Without the libitbboot.so preload, package.loadlib is nil (AC6.4). Fail with
+	-- the actionable launch-option hint instead of a cryptic nil-call.
+	if not Platform.nativePreloadActive() then
+		error(Platform.preloadHint())
+	end
+
 	local library = Platform.nativeLibrary("itb_io")
 	try(function()
 		LOG(string.format("Loading %s...", library))
