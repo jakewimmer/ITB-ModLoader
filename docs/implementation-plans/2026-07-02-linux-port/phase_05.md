@@ -229,10 +229,10 @@ empty, `resource.dat` restored. Launching the game (without preload) runs stock.
 GAME="/var/mnt/.../Into the Breach"
 # AC6.2: fresh install + preload boots the loader UI
 ./install.sh "$GAME"
-( cd "$GAME" && LD_PRELOAD="$PWD/libitbsdl.so" ./Breach )   # UI renders
+( cd "$GAME" && LD_PRELOAD="$PWD/libitbboot.so" ./Breach )  # UI renders
 # AC6.4: no preload — game boots, loader self-reports, no crash
 ( cd "$GAME" && ./Breach )
-grep -n "not LD_PRELOADed" ~/.local/share/IntoTheBreach/modloader.log
+grep -n "not LD_PRELOADed" ~/.local/share/IntoTheBreach/log.txt
 ```
 Expected: with preload the UI renders; without preload the game runs and the log carries the
 missing-preload notice — no crash.

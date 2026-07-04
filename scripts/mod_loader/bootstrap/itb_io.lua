@@ -4,8 +4,9 @@ local function lazy_load()
 		return
 	end
 
-	-- Without the libitbboot.so preload, package.loadlib is nil (AC6.4). Fail with
-	-- the actionable launch-option hint instead of a cryptic nil-call.
+	-- Without the libitbboot.so preload, package.loadlib is the stock stub that
+	-- errors "dynamic libraries not enabled" (AC6.4). Fail with the actionable
+	-- launch-option hint instead of that cryptic message.
 	if not Platform.nativePreloadActive() then
 		error(Platform.preloadHint())
 	end
