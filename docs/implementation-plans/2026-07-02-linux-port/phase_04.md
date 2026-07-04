@@ -224,6 +224,21 @@ table exists (Task 3) — memedit's `luaopen_memedit` accepts the options/offset
 
 **Verifies:** linux-port.AC4.4 (reinterpreted), linux-port.AC4.5
 
+> **Execution revision 2026-07-03 (SKIPPED, user-confirmed) — superseded by
+> memedit's runtime scanner.** Investigation found memedit ships a runtime scanner
+> (`scanner/*.lua`) that derives every offset live (mutate a known field, scan the
+> object's bytes for the change), including the priority Pawn/Board/Tile fields the
+> static luabind/gdb approach could not reach. memedit.cpp uses no Windows memory
+> APIs (only `windows.h`/`DllMain`, already guarded) — reads via in-process pointer
+> deref, Linux-identical — so no C memory-port is needed. The static tool would only
+> recover the ~22 luabind-exposed (non-priority) fields, so it is not built.
+> **AC4.4 is satisfied by the scanner's calibration** (the repeatable regeneration
+> procedure, documented in the submodule's `LINUX_OFFSETS.md`); **AC4.5**'s
+> "diagnostic, not silent wrong offset" is met by the scanner marking uncalibrated
+> fields incomplete and prompting calibration rather than shipping guessed offsets.
+> The `tools/derive_offsets/` scaffold in the sibling clone is left as-is (optional
+> luabind-subset cross-check), not wired into the ship path.
+
 **Repo:** `/var/home/displacer/Projects/clones/memedit` (checked in alongside `__addresses.lua`)
 
 **Files:**
