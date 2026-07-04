@@ -22,10 +22,62 @@ jobs:
         run: |
           CALL _release.bat
 
-      - name: Upload artifact 
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ITB-ModLoader-${{ github.event.inputs.version }}.zip
           path: release/*
+          retention-days: 7
+          if-no-files-found: error
+
+  package-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # GLEW headers are bundled, so no GL dev headers are needed -- only SDL2,
+      # FreeType, Fontconfig dev packages and the GLVND runtime lib to link.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake libsdl2-dev libfreetype6-dev libfontconfig1-dev libgl-dev
+
+      # The Rust (ftldat, itb_io) and memedit artifacts come from separate repos
+      # and ship as committed .so's at the repo root (as the Windows job ships
+      # committed .dll's). The in-repo C/C++ libraries are built from source here
+      # so CI verifies they still compile.
+      - name: Build libitbsdl and assert a single shared Lua runtime
+        run: |
+          cmake -B linux/libitbsdl/build -S linux/libitbsdl
+          cmake --build linux/libitbsdl/build
+          ( cd linux/libitbsdl/build && ctest --output-on-failure )
+          so=linux/libitbsdl/build/libitbsdl.so
+          # Guard against reintroducing a vendored Lua (multi-GC heap corruption):
+          # the library must define no Lua runtime internals and leave lua_*
+          # undefined, to bind the game's single runtime via libitbboot at load.
+          if nm "$so" | grep -E ' [Tt] (luaH_free|sweeplist|luaC_step|luaD_call)'; then
+            echo "::error::libitbsdl.so vendors a Lua runtime"; exit 1
+          fi
+          nm -D "$so" | grep -q ' U lua_gettop' \
+            || { echo "::error::libitbsdl.so does not leave lua_* undefined"; exit 1; }
+          cp "$so" libitbsdl.so
+
+      - name: Build libitbboot preload
+        run: |
+          ( cd itbboot && ./build.sh )
+          cp itbboot/libitbboot.so libitbboot.so
+
+      - name: Assemble Linux bundle
+        run: ./_release_linux.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ITB-ModLoader-Linux-${{ github.event.inputs.version }}
+          path: release-linux/*
           retention-days: 7
           if-no-files-found: error

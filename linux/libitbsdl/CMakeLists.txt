@@ -8,10 +8,20 @@ find_package(SDL2 REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(Fontconfig REQUIRED)
 
-# OpenGL: host has GLVND (libOpenGL.so.0) but no GL/gl.h dev files.
-# We use bundled GLEW headers from the proxy and link to system OpenGL.
-# Link directly to the GLVND library.
-set(OPENGL_LIBRARIES /lib64/libOpenGL.so.0)
+# OpenGL: we use bundled GLEW headers, so no GL/gl.h dev files are needed --
+# only the GLVND runtime library to link against. Locate it portably: prefer the
+# dev symlink (present on CI with libgl-dev/libglvnd-dev), then fall back to the
+# versioned soname that ships without a dev package (e.g. this dev host's
+# /lib64/libOpenGL.so.0), searching the common multiarch and lib64 paths.
+find_library(OPENGL_LIBRARIES NAMES OpenGL GL)
+if(NOT OPENGL_LIBRARIES)
+	find_library(OPENGL_LIBRARIES
+		NAMES libOpenGL.so.0 libGL.so.1
+		PATHS /lib64 /usr/lib64 /usr/lib /usr/lib/x86_64-linux-gnu)
+endif()
+if(NOT OPENGL_LIBRARIES)
+	message(FATAL_ERROR "Could not locate the GLVND OpenGL library (libOpenGL.so.0)")
+endif()
 
 # Lua 5.1 is NOT vendored/linked. The game already runs one Lua 5.1 runtime; a
 # second embedded copy sharing the game's lua_State corrupted the heap. We use
