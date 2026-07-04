@@ -23,3 +23,6 @@ modloader.log
 error.txt
 itbboot/libitbboot.so
 linux/*/build/
+
+# Linux release bundle (assembled by _release_linux.sh)
+release-linux/
