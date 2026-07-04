@@ -371,6 +371,124 @@ int open64(const char *path, int flags, ...) {
 	return real_open64(path, flags);
 }
 
+/* ---- SDL/GL frame-hook forwarding interposers ----------------------------- */
+
+/* libitbsdl's rendering hooks fire from here. Interposing the SDL/GL symbols
+ * directly inside the big, dual-loaded libitbsdl never fired during real
+ * rendering; interposing from this thin, first-loaded preload does. Each shim
+ * resolves the real function once via dlsym(RTLD_NEXT, ...) and forwards into
+ * libitbsdl's exported itbsdl_dispatch_* entry point.
+ *
+ * libitbsdl is loaded via the injected package.loadlib (RTLD_GLOBAL) only after
+ * the first frames render, so its dispatch exports are not resolvable at process
+ * start. Each shim retries dlsym(RTLD_DEFAULT, ...) every call while the pointer
+ * is still NULL, then caches it -- so the hooks begin working the moment
+ * libitbsdl loads mid-run, and early frames simply pass through to the real
+ * function. Pure C, plain ABI-matching types: no SDL/GL headers here. */
+
+void SDL_GL_SwapWindow(void *window) {
+	static void (*real)(void *) = NULL;
+	if (!real) {
+		real = dlsym(RTLD_NEXT, "SDL_GL_SwapWindow");
+	}
+	static void (*disp)(void) = NULL;
+	if (!disp) {
+		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_swapwindow");
+	}
+	if (disp) {
+		disp();  // overlay/draw pass BEFORE the real swap
+	}
+	real(window);
+}
+
+int SDL_PollEvent(void *evt) {
+	static int (*real)(void *) = NULL;
+	if (!real) {
+		real = dlsym(RTLD_NEXT, "SDL_PollEvent");
+	}
+	static int (*disp)(void *) = NULL;
+	if (!disp) {
+		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_event");
+	}
+	if (!disp || !evt) {
+		return real(evt);
+	}
+	for (;;) {
+		int r = real(evt);
+		if (!r) {
+			return 0;
+		}
+		if (!disp(evt)) {
+			return 1;  // unconsumed -> hand this event to the game
+		}
+		/* consumed by a hook -> keep pulling */
+	}
+}
+
+void glBindTexture(unsigned int target, unsigned int texture) {
+	static void (*real)(unsigned int, unsigned int) = NULL;
+	if (!real) {
+		real = dlsym(RTLD_NEXT, "glBindTexture");
+	}
+	static void (*disp)(unsigned int, unsigned int) = NULL;
+	if (!disp) {
+		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_bindtexture");
+	}
+	if (disp) {
+		disp(target, texture);  // track before the real bind (matches old order)
+	}
+	real(target, texture);
+}
+
+void glTexImage2D(unsigned int target, int level, int internalformat, int width,
+	int height, int border, unsigned int format, unsigned int type,
+	const void *pixels) {
+	static void (*real)(unsigned int, int, int, int, int, int, unsigned int,
+		unsigned int, const void *) = NULL;
+	if (!real) {
+		real = dlsym(RTLD_NEXT, "glTexImage2D");
+	}
+	static void (*disp)(unsigned int, int, int, int, unsigned int, const void *) = NULL;
+	if (!disp) {
+		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_teximage2d");
+	}
+	if (disp) {
+		disp(target, internalformat, width, height, format, pixels);
+	}
+	real(target, level, internalformat, width, height, border, format, type, pixels);
+}
+
+void glDrawArrays(unsigned int mode, int first, int count) {
+	static void (*real)(unsigned int, int, int) = NULL;
+	if (!real) {
+		real = dlsym(RTLD_NEXT, "glDrawArrays");
+	}
+	static void (*disp)(void) = NULL;
+	if (!disp) {
+		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_draw");
+	}
+	if (disp) {
+		disp();
+	}
+	real(mode, first, count);
+}
+
+void glDrawElements(unsigned int mode, int count, unsigned int type,
+	const void *indices) {
+	static void (*real)(unsigned int, int, unsigned int, const void *) = NULL;
+	if (!real) {
+		real = dlsym(RTLD_NEXT, "glDrawElements");
+	}
+	static void (*disp)(void) = NULL;
+	if (!disp) {
+		disp = dlsym(RTLD_DEFAULT, "itbsdl_dispatch_draw");
+	}
+	if (disp) {
+		disp();
+	}
+	real(mode, count, type, indices);
+}
+
 /* ---- init ----------------------------------------------------------------- */
 
 __attribute__((constructor)) static void itbboot_init(void) {
