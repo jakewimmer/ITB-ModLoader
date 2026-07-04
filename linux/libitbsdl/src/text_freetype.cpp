@@ -243,6 +243,23 @@ FileFont::~FileFont() {
 
 } // namespace SDL
 
+/* Read the coverage/alpha of one glyph pixel.
+ *
+ * Antialiased glyphs use FT_PIXEL_MODE_GRAY (one byte of coverage per pixel).
+ * Non-antialiased glyphs (antialias=false, or outlineWidth>0) use
+ * FT_PIXEL_MODE_MONO: 1 bit per pixel, MSB first, packed into `pitch` bytes
+ * per row. Indexing such a bitmap as if it were 8bpp gray reads the wrong
+ * bytes and overruns each row, garbling the glyph. Unpack the bit here so
+ * both pixel modes yield an 8-bit alpha.
+ */
+static unsigned char glyphAlpha(const FT_Bitmap &bmp, int gx, int gy) {
+  if (bmp.pixel_mode == FT_PIXEL_MODE_MONO) {
+    unsigned char byte = bmp.buffer[gy * bmp.pitch + (gx >> 3)];
+    return (byte & (0x80 >> (gx & 7))) ? 255 : 0;
+  }
+  return bmp.buffer[gy * bmp.pitch + gx];
+}
+
 /* Surface constructor for text rendering.
  * Rasterizes UTF-8 text into an RGBA Surface using FreeType.
  * Supports antialiasing, color, and outline stroking.
@@ -392,7 +409,7 @@ SDL::Surface::Surface(const SDL::Font *font, const SDL::TextSettings *settings,
             if (px < 0 || px >= width || py < 0 || py >= height)
               continue;
 
-            unsigned char alpha = bmp_glyph->bitmap.buffer[gy * bmp_glyph->bitmap.pitch + gx];
+            unsigned char alpha = glyphAlpha(bmp_glyph->bitmap, gx, gy);
             if (alpha == 0)
               continue;
 
@@ -437,7 +454,7 @@ SDL::Surface::Surface(const SDL::Font *font, const SDL::TextSettings *settings,
         if (px < 0 || px >= width || py < 0 || py >= height)
           continue;
 
-        unsigned char alpha = bmp->buffer[gy * bmp->pitch + gx];
+        unsigned char alpha = glyphAlpha(*bmp, gx, gy);
         if (alpha == 0)
           continue;
 
