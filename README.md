@@ -2,7 +2,15 @@
 
 A mod loader for the game [Into the Breach](https://www.subsetgames.com/itb.html), written in Lua, and with extension DLLs for some additional features. For more information, see [the mod loader's thread on Subset forums](https://www.subsetgames.com/forum/viewtopic.php?f=26&t=33119).
 
-The mod loader **only works with Windows version of the game**. Gamepad input is not supported either.
+The mod loader runs on the **Windows** version of the game, and on the **native Linux** version via an `LD_PRELOAD` launcher. Gamepad input is not supported.
+
+
+## Linux
+
+The loader runs on the native Linux build (not only under Proton). See
+[LAUNCHER_README.md](./LAUNCHER_README.md) for install and the launch option, and
+[docs/linux-proton-vs-native.md](./docs/linux-proton-vs-native.md) for the
+native-vs-Proton trade-off. Proton remains a supported fallback.
 
 
 ## Download
