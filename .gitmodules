@@ -1,6 +1,7 @@
 [submodule "scripts/mod_loader/extensions/memedit"]
 	path = scripts/mod_loader/extensions/modLoaderExtensions/mods/memedit
-	url = https://github.com/itb-community/memedit.git
+	url = https://github.com/jakewimmer/memedit.git
+	branch = feature/linux-support
 [submodule "scripts/mod_loader/extensions/modApiExt"]
 	path = scripts/mod_loader/extensions/modLoaderExtensions/mods/modApiExt
 	url = https://github.com/itb-community/ITB-ModUtils.git
