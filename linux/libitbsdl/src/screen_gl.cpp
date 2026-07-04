@@ -135,7 +135,7 @@ static uint32_t glTexture(unsigned char *pixelData, int w, int h) {
   uint32_t texture = 0;
 
   GLenum texture_format = GL_RGBA;
-  GLenum tex_type = GL_UNSIGNED_INT_8_8_8_8_REV;
+  GLenum tex_type = GL_UNSIGNED_BYTE;
   GLenum internal_format = GL_RGBA8;
 
   int pitch = w * 4;
@@ -210,21 +210,17 @@ void Surface::setBitmap(const uint8_t *data, int sx, int sy, int w, int h,
     initial = (sy + h - 1) * (-stride);
   }
 
+  /* Store pixels in RGBA byte order, unchanged from the source. The game
+   * uploads its own textures as GL_RGBA/GL_UNSIGNED_BYTE (verified from its
+   * glTexImage2D calls), so a Surface must store and hash RGBA to share a hash
+   * with an identically-pixelled game texture -- that hash equality is what
+   * makes wasDrawn()/onModsLoaded fire. glTexture() uploads this buffer as
+   * GL_RGBA/GL_UNSIGNED_BYTE to match. */
   for (int y = 0; y < h; y++) {
     unsigned char *dst = pixelData + (y * w * 4);
     const unsigned char *src =
         data + (initial + sx * 4 + (sy + y) * stride);
-
-    for (int x = 0; x < w; x++) {
-      /* stb_image gives RGBA; need BGRA for GL_UNSIGNED_INT_8_8_8_8_REV */
-      dst[0] = src[2];  // B
-      dst[1] = src[1];  // G
-      dst[2] = src[0];  // R
-      dst[3] = src[3];  // A
-
-      dst += 4;
-      src += 4;
-    }
+    memcpy(dst, src, static_cast<size_t>(w) * 4);
   }
 
   createSurfaceFromPixelData(w, h);
@@ -543,7 +539,9 @@ SurfaceScreenshot::SurfaceScreenshot() {
   }
 
   unsigned char *pixels = new unsigned char[4 * w * h];
-  glReadPixels(0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
+  /* Read back as RGBA so setBitmap (a straight copy) stores RGBA, matching the
+   * surface load path and the game's texture byte order. */
+  glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
   setBitmap(pixels, 0, 0, w, h, -w * 4);
 

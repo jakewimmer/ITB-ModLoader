@@ -70,3 +70,15 @@ enable_testing()
 add_executable(alloc_guard_test test/alloc_guard_test.cpp)
 target_include_directories(alloc_guard_test PRIVATE src)
 add_test(NAME alloc_guard_test COMMAND alloc_guard_test)
+
+# Test that setBitmap stores/hashes pixels in RGBA order (no channel swap), the
+# contract wasDrawn()/onModsLoaded depends on. Links libitbsdl for setBitmap and
+# simple_hash; those paths call no game-provided (Lua/SDL/GL) symbols, so lazy
+# binding lets the .so's undefined symbols stay unresolved at load.
+add_executable(setbitmap_rgba_test test/setbitmap_rgba_test.cpp)
+target_include_directories(setbitmap_rgba_test PRIVATE src)
+target_include_directories(setbitmap_rgba_test SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+target_link_libraries(setbitmap_rgba_test PRIVATE itbsdl)
+target_link_options(setbitmap_rgba_test PRIVATE
+    -Wl,-z,lazy -Wl,--unresolved-symbols=ignore-all)
+add_test(NAME setbitmap_rgba_test COMMAND setbitmap_rgba_test)
